@@ -1,0 +1,1955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>J.H. Walker Trucking — Operations Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #1e293b; }
+
+    .header {
+      background: #0f2240; color: #fff;
+      padding: 14px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+      position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .header-logo-img {
+      height: 58px;
+      width: auto;
+      mix-blend-mode: screen;
+      filter: brightness(1.05);
+    }
+    .header-title { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.2px; }
+    .header-subtitle { font-size: 0.75rem; color: #94a3b8; margin-top: 3px; }
+    .header-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .last-updated { font-size: 0.75rem; color: #94a3b8; }
+
+    .btn-group { display: flex; border-radius: 6px; overflow: hidden; border: 1px solid #334155; }
+    .btn-group button {
+      background: transparent; color: #94a3b8; border: none;
+      padding: 6px 14px; font-size: 0.8rem; cursor: pointer;
+      transition: all 0.15s; font-family: inherit;
+    }
+    .btn-group button:not(:last-child) { border-right: 1px solid #334155; }
+    .btn-group button.active { background: #2563eb; color: #fff; font-weight: 600; }
+    .btn-group button:hover:not(.active) { background: #1e3a5f; color: #e2e8f0; }
+
+    .main { padding: 20px 24px; max-width: 1600px; margin: 0 auto; }
+
+    .section-label {
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #64748b; margin: 20px 0 10px;
+    }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+    .kpi-card {
+      background: #fff; border-radius: 10px; padding: 18px 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07); border-left: 4px solid #2563eb; position: relative;
+    }
+    .kpi-card.green  { border-left-color: #16a34a; }
+    .kpi-card.amber  { border-left-color: #d97706; }
+    .kpi-card.slate  { border-left-color: #64748b; }
+    .kpi-card.teal   { border-left-color: #0891b2; }
+    .kpi-label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; }
+    .kpi-value { font-size: 1.75rem; font-weight: 700; color: #0f2240; margin: 4px 0 2px; line-height: 1; }
+    .kpi-sub   { font-size: 0.75rem; color: #94a3b8; }
+    .kpi-badge {
+      position: absolute; top: 14px; right: 14px;
+      font-size: 0.7rem; font-weight: 700; padding: 2px 7px; border-radius: 20px;
+    }
+    .badge-green { background: #dcfce7; color: #16a34a; }
+    .badge-amber { background: #fef3c7; color: #d97706; }
+    .badge-blue  { background: #dbeafe; color: #2563eb; }
+
+    .two-col   { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .three-col { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
+    @media (max-width: 900px) {
+      .two-col, .three-col { grid-template-columns: 1fr; }
+    }
+
+    .card { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+    .card-title {
+      font-size: 0.8rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: #334155; margin-bottom: 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .chart-wrap { position: relative; height: 220px; width: 100%; }
+
+    .performer-card {
+      background: #fff; border-radius: 10px; padding: 16px 18px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+      display: flex; align-items: center; gap: 14px;
+    }
+    .rank-badge {
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 0.9rem; flex-shrink: 0;
+    }
+    .rank-1 { background: #fef9c3; color: #854d0e; }
+    .rank-2 { background: #f1f5f9; color: #475569; }
+    .rank-3 { background: #fef3c7; color: #92400e; }
+    .performer-info { flex: 1; min-width: 0; }
+    .performer-name { font-weight: 700; font-size: 0.9rem; color: #0f2240; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .performer-detail { font-size: 0.72rem; color: #94a3b8; margin-top: 2px; }
+    .performer-rev { font-weight: 800; font-size: 1.05rem; color: #16a34a; white-space: nowrap; }
+
+    .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .data-table th {
+      background: #f8fafc; padding: 8px 12px; text-align: left;
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.05em; color: #64748b;
+      border-bottom: 2px solid #e2e8f0; cursor: pointer; user-select: none;
+    }
+    .data-table th:hover { color: #2563eb; }
+    .data-table td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: #f8fafc; }
+    .pay-bar-wrap { display: flex; align-items: center; gap: 8px; }
+    .pay-bar { height: 6px; background: #bfdbfe; border-radius: 3px; flex: 1; }
+    .pay-bar-fill { height: 100%; background: #2563eb; border-radius: 3px; transition: width 0.4s; }
+    .pill { display: inline-block; font-size: 0.65rem; font-weight: 600; padding: 2px 7px; border-radius: 20px; }
+    .pill-co  { background: #dbeafe; color: #1d4ed8; }
+    .pill-oo  { background: #f3e8ff; color: #7e22ce; }
+    .pill-dfo { background: #fce7f3; color: #9d174d; }
+
+    /* Terminal badge chips */
+    .term-chip { display: inline-block; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+    .term-HOU { background: #dbeafe; color: #1e40af; }
+    .term-LOU { background: #dcfce7; color: #166534; }
+    .term-DFW { background: #fef3c7; color: #92400e; }
+    .term-OKC { background: #f3e8ff; color: #6b21a8; }
+
+    .notice {
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+      padding: 12px 16px; font-size: 0.78rem; color: #92400e;
+      display: flex; gap: 8px; align-items: flex-start;
+    }
+    .notice-icon { font-size: 1rem; flex-shrink: 0; }
+
+    .util-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 0.78rem; }
+    .util-label { width: 140px; flex-shrink: 0; color: #334155; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .util-bar { flex: 1; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+    .util-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+    .util-fill-blue  { background: #2563eb; }
+    .util-fill-green { background: #16a34a; }
+    .util-val { width: 60px; text-align: right; color: #64748b; font-size: 0.72rem; flex-shrink: 0; }
+
+    .donut-stats { display: flex; gap: 20px; margin-top: 12px; justify-content: center; flex-wrap: wrap; }
+    .donut-stat-val { font-size: 1.4rem; font-weight: 800; color: #0f2240; }
+    .donut-stat-lbl { font-size: 0.68rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    /* Terminal summary strip */
+    .terminal-strip { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+    .terminal-card {
+      background: #fff; border-radius: 10px; padding: 14px 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07); border-top: 3px solid #e2e8f0;
+    }
+    .terminal-card.hou { border-top-color: #2563eb; }
+    .terminal-card.lou { border-top-color: #16a34a; }
+    .terminal-card.dfw { border-top-color: #d97706; }
+    .terminal-card.okc { border-top-color: #7c3aed; }
+    .terminal-name { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; }
+    .terminal-city { font-size: 0.72rem; color: #94a3b8; margin-bottom: 6px; }
+    .terminal-rev  { font-size: 1.25rem; font-weight: 800; color: #0f2240; }
+    .terminal-meta { font-size: 0.72rem; color: #94a3b8; margin-top: 2px; }
+
+    .net-rev { font-size: 0.72rem; color: #64748b; margin-top: 1px; }
+    .net-rev span { color: #16a34a; font-weight: 600; }
+
+    .trend-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .trend-toggle { display: flex; border-radius: 6px; overflow: hidden; border: 1px solid #e2e8f0; }
+    .trend-toggle button {
+      background: transparent; color: #64748b; border: none;
+      padding: 5px 12px; font-size: 0.75rem; cursor: pointer;
+      transition: all 0.15s; font-family: inherit;
+    }
+    .trend-toggle button:not(:last-child) { border-right: 1px solid #e2e8f0; }
+    .trend-toggle button.active { background: #0f2240; color: #fff; font-weight: 600; }
+    .trend-toggle button:hover:not(.active) { background: #f1f5f9; }
+
+    .footer {
+      text-align: center; padding: 20px; font-size: 0.72rem; color: #94a3b8;
+      border-top: 1px solid #e2e8f0; margin-top: 24px;
+    }
+
+    /* ── OTD section ── */
+    .otd-strip { display: grid; grid-template-columns: repeat(5,1fr); gap: 12px; }
+    @media (max-width: 1100px) { .otd-strip { grid-template-columns: repeat(3,1fr); } }
+    @media (max-width: 700px)  { .otd-strip { grid-template-columns: repeat(2,1fr); } }
+    .otd-card {
+      background: #fff; border-radius: 10px; padding: 14px 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07); border-top: 3px solid #e2e8f0; text-align: center;
+    }
+    .otd-card-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; margin-bottom: 2px; }
+    .otd-pct { font-size: 1.55rem; font-weight: 800; margin: 4px 0 2px; }
+    .otd-green { color: #16a34a; }
+    .otd-amber { color: #d97706; }
+    .otd-red   { color: #dc2626; }
+    .otd-action-banner {
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+      padding: 12px 16px; font-size: 0.82rem; color: #92400e;
+      display: flex; gap: 10px; align-items: flex-start; margin-bottom: 14px;
+    }
+  </style>
+<script>window.__DASHBOARD_DATA__ = {"generatedAt": "2026-04-03T16:26-05:00", "driverAvailability": {"all": {"available": null, "driver_total": null}}, "tractorAvailability": {"available": null}, "trends": {}, "cancelledLoads": {"today": {"summary": [], "detail": [], "totals": {}}, "week": {"summary": [], "detail": [], "totals": {}}, "month": {"summary": [], "detail": [], "totals": {}}}};</script>
+</head>
+<body>
+<!-- ── Auth overlay: covers page until Microsoft login completes ── -->
+<div id="authOverlay" style="position:fixed;inset:0;z-index:9999;background:#0f2240;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:'Segoe UI',Arial,sans-serif;">
+  <div style="font-size:2rem;font-weight:700;letter-spacing:0.04em;margin-bottom:6px;">J.H. WALKER</div>
+  <div style="font-size:0.9rem;color:#94a3b8;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:40px;">Operations Dashboard</div>
+  <div style="width:36px;height:36px;border:3px solid #334155;border-top-color:#60a5fa;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:24px;"></div>
+  <div style="color:#94a3b8;font-size:0.9rem;">Signing in with your Microsoft account&hellip;</div>
+  <div id="authError" style="color:#fca5a5;font-size:0.85rem;margin-top:16px;max-width:360px;text-align:center;"></div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+
+
+<header class="header">
+  <div class="header-left">
+    <img src="jhw-logo.png" alt="J.H. Walker Trucking" class="header-logo-img">
+    <div>
+      <div class="header-title">Operations Dashboard</div>
+      <div class="header-subtitle">Live Data &mdash; TMW Revenue &amp; Terminal View</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="btn-group" id="terminalGroup">
+      <button class="active" onclick="setTerminal('all',this)">All</button>
+      <button onclick="setTerminal('HOU',this)">HOU</button>
+      <button onclick="setTerminal('LOU',this)">LOU</button>
+      <button onclick="setTerminal('DFW',this)">DFW</button>
+      <button onclick="setTerminal('OKC',this)">OKC</button>
+    </div>
+    <div class="btn-group" id="periodGroup">
+      <button class="active" onclick="setPeriod('today',this)">Today</button>
+      <button onclick="setPeriod('week',this)">This Week</button>
+      <button onclick="setPeriod('month',this)">This Month</button>
+    </div>
+    <div class="last-updated" id="lastUpdated"></div>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- ── Terminal Summary Strip ── -->
+  <div class="section-label">Revenue by Terminal</div>
+  <div class="terminal-strip" id="terminalStrip"></div>
+
+  <!-- ── KPI Row ── -->
+  <div class="section-label">Key Performance Indicators</div>
+  <div class="kpi-grid">
+    <div class="kpi-card green">
+      <div class="kpi-label">Total Revenue</div>
+      <div class="kpi-value" id="kpiRevenue">—</div>
+      <div class="kpi-sub" id="kpiRevSub">—</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Total Loads</div>
+      <div class="kpi-value" id="kpiLoads">—</div>
+      <div class="kpi-sub" id="kpiLoadsSub">—</div>
+    </div>
+    <div class="kpi-card teal">
+      <div class="kpi-label">Revenue / Mile</div>
+      <div class="kpi-value" id="kpiRPM">—</div>
+      <div class="kpi-sub" id="kpiRPMSub">Loaded &amp; empty miles</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Loaded Mile %</div>
+      <div class="kpi-value" id="kpiLoadedPct">—</div>
+      <div class="kpi-sub" id="kpiMilesSub">—</div>
+    </div>
+    <div class="kpi-card amber">
+      <div class="kpi-label">Drivers Available</div>
+      <div class="kpi-value" id="kpiDriversWaiting">—</div>
+      <div class="kpi-sub" id="kpiDriversSub">of total active drivers</div>
+      <span class="kpi-badge badge-amber">Live</span>
+    </div>
+    <div class="kpi-card slate">
+      <div class="kpi-label">Tractors Available</div>
+      <div class="kpi-value" id="kpiTractorsAvailable">98</div>
+      <div class="kpi-sub">Not currently dispatched</div>
+      <span class="kpi-badge badge-blue">Live</span>
+    </div>
+  </div>
+
+  <!-- ── Revenue Trends ── -->
+  <div class="section-label">Revenue Trends</div>
+  <div class="card" id="trendCard">
+  <div id="trendPanelCompany">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+      <div class="card-title" style="margin-bottom:0;">Revenue Trends — Company Total</div>
+      <div id="trendDrillBtn" onclick="openTrendDrillDown()"
+           style="display:inline-flex;align-items:center;gap:6px;font-size:0.7rem;color:#3b82f6;
+                  background:#eff6ff;border:1px solid #bfdbfe;border-radius:20px;
+                  padding:4px 12px;cursor:pointer;transition:background 0.15s;"
+           onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
+        📊 View breakdown by terminal &nbsp;→
+      </div>
+    </div>
+    <div style="display:flex;gap:14px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:6px;font-size:0.73rem;color:#475569;">
+        <div style="width:26px;height:3px;background:#c8102e;border-radius:2px;"></div> Total Revenue
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:0.73rem;color:#475569;">
+        <div style="width:26px;height:0;border-top:3px dashed #c8102e;"></div> Projected full month
+      </div>
+    </div>
+    <div class="chart-wrap" style="height:260px;cursor:pointer;" onclick="openTrendDrillDown()">
+      <canvas id="trendChart"></canvas>
+    </div>
+    <!-- MTD strip -->
+    <div style="margin-top:18px;padding-top:16px;border-top:1px solid #f1f5f9;">
+      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#94a3b8;margin-bottom:8px;" id="trendMtdLabel">📅 Month to Date</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;min-width:130px;flex:1;">
+          <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;" id="trendMtdActualLabel">Actual MTD</div>
+          <div style="font-size:1.05rem;font-weight:700;color:#0f2240;" id="trendMtdActual">—</div>
+          <div style="font-size:0.68rem;color:#64748b;margin-top:2px;" id="trendMtdPct">—</div>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;min-width:130px;flex:1;">
+          <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">Projected Full Month</div>
+          <div style="font-size:1.05rem;font-weight:700;color:#0f2240;" id="trendMtdProj">—</div>
+          <div style="font-size:0.68rem;color:#64748b;margin-top:2px;" id="trendMtdProjSub">—</div>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;min-width:130px;flex:1;">
+          <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;" id="trendMtdLyLabel">vs LY Same Period</div>
+          <div style="font-size:1.05rem;font-weight:700;" id="trendMtdLy">—</div>
+          <div style="font-size:0.68rem;color:#64748b;margin-top:2px;" id="trendMtdLySub">—</div>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;min-width:130px;flex:1;">
+          <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;" id="trendLastCompleteLabel">Last Complete Month</div>
+          <div style="font-size:1.05rem;font-weight:700;color:#0f2240;" id="trendLastComplete">—</div>
+          <div style="font-size:0.68rem;color:#64748b;margin-top:2px;" id="trendLastCompleteSub">—</div>
+        </div>
+      </div>
+    </div>
+    <!-- YTD strip -->
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9;">
+      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#94a3b8;margin-bottom:8px;" id="trendYtdLabel">📆 Year to Date</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px;min-width:130px;flex:1;">
+          <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">YTD Revenue</div>
+          <div style="font-size:1.05rem;font-weight:700;color:#0f2240;" id="trendYtdActual">—</div>
+          <div style="font-size:0.68rem;color:#64748b;margin-top:2px;" id="trendYtdActualSub">—</div>
+        </div>
+        <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px;min-width:130px;flex:1;">
+          <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">YTD Projected (thru month-end)</div>
+          <div style="font-size:1.05rem;font-weight:700;color:#0f2240;" id="trendYtdProj">—</div>
+          <div style="font-size:0.68rem;color:#64748b;margin-top:2px;" id="trendYtdProjSub">—</div>
+        </div>
+        <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px;min-width:130px;flex:1;">
+          <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">vs LY Same Period</div>
+          <div style="font-size:1.05rem;font-weight:700;" id="trendYtdLy">—</div>
+          <div style="font-size:0.68rem;color:#64748b;margin-top:2px;" id="trendYtdLySub">—</div>
+        </div>
+        <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px;min-width:130px;flex:1;">
+          <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">Best Month YTD</div>
+          <div style="font-size:1.05rem;font-weight:700;color:#0f2240;" id="trendBestMonth">—</div>
+          <div style="font-size:0.68rem;color:#64748b;margin-top:2px;" id="trendBestMonthSub">—</div>
+        </div>
+      </div>
+    </div>
+  </div><!-- end trendPanelCompany -->
+
+  <!-- Terminal breakdown panel (in-tile, no modal) -->
+  <div id="trendPanelTerminal" style="display:none;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+      <div class="card-title" style="margin-bottom:0;">Revenue Trends — By Terminal</div>
+      <div onclick="closeTrendDrillDown()"
+           style="display:inline-flex;align-items:center;gap:6px;font-size:0.7rem;color:#3b82f6;
+                  background:#eff6ff;border:1px solid #bfdbfe;border-radius:20px;
+                  padding:4px 12px;cursor:pointer;transition:background 0.15s;"
+           onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
+        ← Back to Company Total
+      </div>
+    </div>
+    <div style="display:flex;gap:14px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:5px;font-size:0.72rem;color:#475569;"><div style="width:22px;height:3px;background:#2563eb;border-radius:2px;"></div>Houston</div>
+      <div style="display:flex;align-items:center;gap:5px;font-size:0.72rem;color:#475569;"><div style="width:22px;height:3px;background:#16a34a;border-radius:2px;"></div>Louisiana</div>
+      <div style="display:flex;align-items:center;gap:5px;font-size:0.72rem;color:#475569;"><div style="width:22px;height:3px;background:#d97706;border-radius:2px;"></div>Dallas/FW</div>
+      <div style="display:flex;align-items:center;gap:5px;font-size:0.72rem;color:#475569;"><div style="width:22px;height:3px;background:#9333ea;border-radius:2px;"></div>Oklahoma City</div>
+      <div style="display:flex;align-items:center;gap:5px;font-size:0.72rem;color:#475569;margin-left:8px;padding-left:8px;border-left:1px solid #e2e8f0;"><div style="width:22px;height:0;border-top:3px dashed #94a3b8;"></div>Projected</div>
+    </div>
+    <div class="chart-wrap" style="height:260px;">
+      <canvas id="trendTerminalChart"></canvas>
+    </div>
+    <!-- MTD terminal cards -->
+    <div style="margin-top:18px;padding-top:16px;border-top:1px solid #f1f5f9;">
+      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#94a3b8;margin-bottom:8px;" id="trendDrillMtdLabel">📅 Month to Date</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;" id="trendDrillMtdCards"></div>
+    </div>
+    <!-- YTD terminal cards -->
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9;">
+      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#94a3b8;margin-bottom:8px;" id="trendDrillYtdLabel">📆 Year to Date</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;" id="trendDrillYtdCards"></div>
+    </div>
+  </div>
+</div>
+
+  <!-- ── Cancelled / Turned-Down Loads ── -->
+  <div class="section-label" id="cancelSectionLabel">Turned Down / Cancelled Loads</div>
+  <div class="card" id="cancelCard">
+
+    <!-- Panel 1: Summary by equipment type -->
+    <div id="cancelPanelSummary">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+        <div class="card-title" style="margin-bottom:0;">Turned Down / Cancelled Loads
+          <span style="font-size:0.68rem;color:#94a3b8;font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px;" id="cancelSubtitle">Shell &amp; BP EDI tenders</span>
+        </div>
+      </div>
+      <!-- KPI strip -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+        <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 16px;min-width:110px;flex:1;">
+          <div style="font-size:0.62rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">OXY</div>
+          <div style="font-size:1.3rem;font-weight:700;color:#0f2240;" id="canOXY">—</div>
+        </div>
+        <div style="background:#fff0f0;border:1px solid #fecaca;border-radius:8px;padding:10px 16px;min-width:110px;flex:1;">
+          <div style="font-size:0.62rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">Shell</div>
+          <div style="font-size:1.3rem;font-weight:700;color:#0f2240;" id="canShell">—</div>
+        </div>
+        <div style="background:#f0f4ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 16px;min-width:110px;flex:1;">
+          <div style="font-size:0.62rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">BP</div>
+          <div style="font-size:1.3rem;font-weight:700;color:#0f2240;" id="canBP">—</div>
+        </div>
+        <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 16px;min-width:110px;flex:1;">
+          <div style="font-size:0.62rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">Turned Down</div>
+          <div style="font-size:1.3rem;font-weight:700;color:#c2410c;" id="canDeclined">—</div>
+        </div>
+      </div>
+      <!-- Summary table -->
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.8rem;" id="cancelSummaryTable">
+          <thead>
+            <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+              <th style="text-align:left;padding:8px 10px;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Equipment Type</th>
+              <th style="text-align:left;padding:8px 10px;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Trailer Type</th>
+              <th style="text-align:center;padding:8px 10px;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Shell</th>
+              <th style="text-align:center;padding:8px 10px;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">BP</th>
+              <th style="text-align:center;padding:8px 10px;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Total</th>
+              <th style="text-align:center;padding:8px 10px;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:#c2410c;">Turned Down</th>
+            </tr>
+          </thead>
+          <tbody id="cancelSummaryBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Panel 2: Detail drill-down (in-tile) -->
+    <div id="cancelPanelDetail" style="display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+        <div class="card-title" style="margin-bottom:0;" id="cancelDetailTitle">All Cancelled Loads — Detail</div>
+        <div onclick="closeCancelDetail()"
+             style="display:inline-flex;align-items:center;gap:6px;font-size:0.7rem;color:#3b82f6;
+                    background:#eff6ff;border:1px solid #bfdbfe;border-radius:20px;
+                    padding:4px 12px;cursor:pointer;transition:background 0.15s;"
+             onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
+          ← Back to Summary
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.78rem;" id="cancelDetailTable">
+          <thead>
+            <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+              <th style="text-align:left;padding:7px 10px;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;white-space:nowrap;">Order #</th>
+              <th style="text-align:left;padding:7px 10px;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;white-space:nowrap;">Customer</th>
+              <th style="text-align:left;padding:7px 10px;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;white-space:nowrap;">Pickup Location</th>
+              <th style="text-align:left;padding:7px 10px;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;white-space:nowrap;">Delivery Location</th>
+              <th style="text-align:left;padding:7px 10px;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;white-space:nowrap;">Pickup Time</th>
+              <th style="text-align:left;padding:7px 10px;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;white-space:nowrap;">Delivery Time</th>
+              <th style="text-align:left;padding:7px 10px;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;white-space:nowrap;">Tendered</th>
+              <th style="text-align:left;padding:7px 10px;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;white-space:nowrap;">Equipment</th>
+              <th style="text-align:left;padding:7px 10px;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;white-space:nowrap;">Trailer</th>
+              <th style="text-align:left;padding:7px 10px;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;white-space:nowrap;">Terminal</th>
+              <th style="text-align:left;padding:7px 10px;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;white-space:nowrap;">Reason</th>
+            </tr>
+          </thead>
+          <tbody id="cancelDetailBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Top Performers ── -->
+  <div class="section-label">Top Performers</div>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">Top 3 Drivers — Revenue <span id="driverPeriodLabel" style="font-weight:400;color:#94a3b8;text-transform:none;letter-spacing:0;font-size:0.72rem;"></span></div>
+      <div id="topDriverCards" style="display:flex;flex-direction:column;gap:10px;"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Top 3 Customers — Revenue <span id="custPeriodLabel" style="font-weight:400;color:#94a3b8;text-transform:none;letter-spacing:0;font-size:0.72rem;"></span></div>
+      <div id="topCustCards" style="display:flex;flex-direction:column;gap:10px;"></div>
+    </div>
+  </div>
+
+  <!-- ── Revenue Charts ── -->
+  <div class="section-label">Revenue Breakdown</div>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">Revenue by Terminal <span id="fleetChartPeriod" style="font-weight:400;color:#94a3b8;text-transform:none;letter-spacing:0;font-size:0.72rem;"></span></div>
+      <div class="chart-wrap"><canvas id="fleetChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Top Customers by Revenue <span id="custChartPeriod" style="font-weight:400;color:#94a3b8;text-transform:none;letter-spacing:0;font-size:0.72rem;"></span></div>
+      <div class="chart-wrap"><canvas id="custChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ── Driver Pay & Availability ── -->
+  <div class="section-label">Driver Performance &amp; Pay</div>
+  <div class="two-col">
+    <div class="card" style="overflow-x:auto;">
+      <div class="card-title">Driver Pay vs. Revenue <span id="driverTablePeriod" style="font-weight:400;color:#94a3b8;text-transform:none;letter-spacing:0;font-size:0.72rem;"></span></div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Driver</th>
+            <th>Type</th>
+            <th>Terminal</th>
+            <th>Loads</th>
+            <th>Revenue</th>
+            <th>Pay</th>
+            <th>Margin</th>
+            <th>Avg Rev/Load</th>
+          </tr>
+        </thead>
+        <tbody id="driverTableBody"></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">Driver Availability by Terminal <span style="font-weight:400;color:#94a3b8;text-transform:none;letter-spacing:0;font-size:0.72rem;">(Live)</span></div>
+      <table class="data-table" style="margin-bottom:4px;">
+        <thead>
+          <tr>
+            <th>Terminal</th>
+            <th style="text-align:center;">Available</th>
+            <th style="text-align:center;">Total Drivers</th>
+          </tr>
+        </thead>
+        <tbody id="driverAvailBody">
+          <tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:12px;">Loading…</td></tr>
+        </tbody>
+      </table>
+      <div class="card-title" style="margin-top:14px;">Action Items</div>
+      <div id="attentionPanel"></div>
+    </div>
+  </div>
+
+  <!-- ── Brokered Loads ── -->
+  <div class="section-label">Brokered Loads — Outside Carrier</div>
+  <div class="card" style="overflow-x:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+      <div class="card-title" style="margin-bottom:0;">Outside Carrier Loads <span id="brokeredPeriodLabel" style="font-weight:400;color:#94a3b8;text-transform:none;letter-spacing:0;font-size:0.72rem;"></span></div>
+    </div>
+    <!-- KPI summary row -->
+    <div id="brokerKpis" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
+    <!-- Customer breakdown table -->
+    <table class="data-table" id="brokeredTable">
+      <thead>
+        <tr>
+          <th>Customer</th>
+          <th style="text-align:center;">Loads</th>
+          <th style="text-align:right;">Revenue</th>
+          <th style="text-align:right;">Carrier Cost</th>
+          <th style="text-align:right;">Net Profit</th>
+          <th style="text-align:center;">Margin %</th>
+        </tr>
+      </thead>
+      <tbody id="brokeredTableBody">
+        <tr><td colspan="6" style="text-align:center;color:#94a3b8;">Loading…</td></tr>
+      </tbody>
+    </table>
+    <div style="font-size:0.7rem;color:#94a3b8;margin-top:8px;">Click a customer to view individual orders</div>
+  </div>
+
+  <!-- ── On-Time Delivery ── -->
+  <div class="section-label">On-Time Delivery</div>
+  <div class="otd-action-banner" id="otdActionBanner" style="display:none;">
+    <span style="font-size:1.1rem;flex-shrink:0;">⚠</span>
+    <div id="otdActionText"></div>
+  </div>
+  <div class="otd-strip" id="otdStrip"></div>
+  <div class="card" style="margin-top:14px;">
+    <div class="card-title">Late Arrival Reasons <span id="otdReasonPeriod" style="font-weight:400;color:#94a3b8;text-transform:none;letter-spacing:0;font-size:0.72rem;"></span></div>
+    <div class="chart-wrap" style="height:200px;"><canvas id="otdReasonsChart"></canvas></div>
+  </div>
+
+</main>
+
+<!-- ── Drill-down Modal ── -->
+<div id="drillModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:200;overflow-y:auto;padding:24px;" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:#fff;border-radius:12px;max-width:900px;margin:0 auto;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <div style="background:#0f2240;color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div id="modalTitle" style="font-weight:700;font-size:1rem;"></div>
+        <div id="modalSubtitle" style="font-size:0.75rem;color:#94a3b8;margin-top:3px;"></div>
+      </div>
+      <button onclick="document.getElementById('drillModal').style.display='none'" style="background:none;border:none;color:#94a3b8;font-size:1.3rem;cursor:pointer;line-height:1;padding:4px 8px;">✕</button>
+    </div>
+    <div style="padding:20px;">
+      <div id="modalKpis" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;"></div>
+      <div id="modalBody" style="overflow-x:auto;"></div>
+    </div>
+  </div>
+</div>
+
+<footer class="footer">
+  Data sourced live from TMW (Rev Terminal: HOU · LOU · DFW · OKC) &nbsp;|&nbsp; J.H. Walker Trucking Operations Dashboard &nbsp;|&nbsp; Refresh page to update
+</footer>
+
+<script>
+// ════════════════════════════════════════
+// LIVE DATA CONFIG
+// dashboard-data.json is written to the same directory as this HTML file
+// by the cron job (dashboard_refresh.py) every 15 minutes.
+// Leave DASHBOARD_DATA_URL blank — auto-detection handles all environments.
+// ════════════════════════════════════════
+const DASHBOARD_DATA_URL = '';
+
+// Auto-detect the JSON data URL.
+// Works on WordPress (tmw.texsix.com), Azure Static Web, SharePoint, or any
+// web server — dashboard-data.json lives in the same directory as this file.
+function resolveDataUrl() {
+  if (DASHBOARD_DATA_URL) return DASHBOARD_DATA_URL;
+  const { protocol, hostname, pathname } = window.location;
+  // Any real web server (http or https) — not a local file:// open
+  if (protocol === 'http:' || protocol === 'https:') {
+    const dir = pathname.substring(0, pathname.lastIndexOf('/') + 1);
+    return `${window.location.origin}${dir}dashboard-data.json`;
+  }
+  return null;  // local file:// open — use embedded static snapshot below
+}
+
+// Show a loading indicator while fetching
+document.getElementById('lastUpdated').textContent = 'Loading data…';
+
+// ════════════════════════════════════════
+// TERMINAL CONFIG
+// ════════════════════════════════════════
+const TERMINALS = {
+  HOU: { label: 'Houston',       city: 'Houston, TX',       css: 'hou', color: '#2563eb' },
+  LOU: { label: 'Houma',         city: 'Houma, LA',         css: 'lou', color: '#16a34a' },
+  DFW: { label: 'Grand Prairie', city: 'Grand Prairie, TX', css: 'dfw', color: '#d97706' },
+  OKC: { label: 'Oklahoma City', city: 'Oklahoma City, OK', css: 'okc', color: '#7c3aed' },
+};
+
+// ════════════════════════════════════════
+// DATA  — sourced directly from TMW via dwFacts_TripDetail × dwRevTypeDimension
+// ════════════════════════════════════════
+const DATA = {
+  today: {
+    label: 'Today (Mar 27)',
+    terminals: {
+      HOU: { revenue: 59299.06, net_revenue: 48625.24, loads: 36,  loaded_miles: 7886,  empty_miles: 4883 },
+      LOU: { revenue: 16532.70, net_revenue: 13557.01,  loads: 23,  loaded_miles: 2798,  empty_miles: 2313 },
+      DFW: { revenue:  4092.00, net_revenue:  3355.44,  loads:  2,  loaded_miles:  874,  empty_miles:    0 },
+      OKC: { revenue:  5695.15, net_revenue:  4670.02,  loads:  3,  loaded_miles:  920,  empty_miles:  275 },
+    },
+    topCustomers: [
+      { name: 'SUBSEA7 US LLC',        revenue: 16487.76, loads: 9, avgPerLoad: 1831.97 },
+      { name: 'SABINE ENERGY INC.',     revenue: 15968.72, loads: 9, avgPerLoad: 1774.30 },
+      { name: 'CH ROBINSON BP',         revenue: 10657.61, loads: 6, avgPerLoad: 1776.27 },
+      { name: 'SHELL',                  revenue:  3207.74, loads: 4, avgPerLoad:  801.94 },
+      { name: 'BLUE WATER SHIPPING',    revenue:  2100.00, loads: 1, avgPerLoad: 2100.00 },
+      { name: 'SUPERIOR DELIVERY SVC',  revenue:  1613.90, loads: 2, avgPerLoad:  806.95 },
+      { name: 'ANADARKO OFFSHORE',      revenue:  1339.05, loads: 3, avgPerLoad:  446.35 },
+    ],
+    topDrivers: [
+      { name: 'Nathan Felchak',   terminal: 'HOU', loads: 1, revenue: 5535.82, pay: null,   type: 'DFO' },
+      { name: 'Timothy Webb',     terminal: 'HOU', loads: 1, revenue: 3005.62, pay: null,   type: 'Company' },
+      { name: 'Jerome Williams',  terminal: 'LOU', loads: 1, revenue: 2993.79, pay: null,   type: 'Company' },
+      { name: 'Justin Wood',      terminal: 'HOU', loads: 1, revenue: 2100.00, pay: null,   type: 'OO' },
+      { name: 'Abdullah Kazali',  terminal: 'HOU', loads: 1, revenue: 2046.35, pay: null,   type: 'OO' },
+      { name: 'Fadi Alhattab',    terminal: 'HOU', loads: 1, revenue: 1971.35, pay: null,   type: 'OO' },
+      { name: 'Jay Hawthorne',    terminal: 'HOU', loads: 1, revenue: 1971.35, pay: null,   type: 'Company' },
+    ],
+    driverLoads: {
+      'Nathan Felchak':  [{ order:'20261801', date:'2026-03-27', customer:'SUBSEA7 US LLC',    revenue:5535.82, pay:null,   loaded_miles:612, empty_miles:244, terminal:'HOU' }],
+      'Timothy Webb':    [{ order:'20261743', date:'2026-03-27', customer:'CH ROBINSON BP',    revenue:3005.62, pay:null,   loaded_miles:310, empty_miles:190, terminal:'HOU' }],
+      'Jerome Williams': [{ order:'20261712', date:'2026-03-27', customer:'SABINE ENERGY INC.',revenue:2993.79, pay:null,   loaded_miles:298, empty_miles:141, terminal:'LOU' }],
+    },
+    otd: {
+      by_terminal: {
+        HOU: { total: 63, on_time: 54, late:  9, late_no_reason:  7, avg_mins_late: 280, otd_pct: 85.7 },
+        LOU: { total: 71, on_time: 68, late:  3, late_no_reason:  3, avg_mins_late: 510, otd_pct: 95.8 },
+        DFW: { total:  5, on_time:  4, late:  1, late_no_reason:  1, avg_mins_late: 240, otd_pct: 80.0 },
+        OKC: { total:  3, on_time:  3, late:  0, late_no_reason:  0, avg_mins_late: null,otd_pct:100.0 },
+        all: { total:142, on_time:129, late: 13, late_no_reason: 11, avg_mins_late: null, otd_pct: 90.8 },
+      },
+      late_reasons: [
+        { reason:'No Reason Code', count:11 },
+        { reason:'Customer Delay',  count: 1 },
+        { reason:'Traffic',         count: 1 },
+      ],
+      total_late_no_reason: 11,
+    },
+  },
+
+  week: {
+    label: 'This Week (Mar 23–27)',
+    terminals: {
+      HOU: { revenue: 295407.40, net_revenue: 242234.07, loads: 192, loaded_miles: 40441, empty_miles: 21445 },
+      LOU: { revenue: 121952.94, net_revenue: 100001.41, loads: 162, loaded_miles: 19485, empty_miles: 13000 },
+      DFW: { revenue:  16896.85, net_revenue:  13855.42, loads:  10, loaded_miles:  3538, empty_miles:     0 },
+      OKC: { revenue:   9220.30, net_revenue:   7560.65, loads:   7, loaded_miles:  1792, empty_miles:   543 },
+    },
+    topCustomers: [
+      { name: 'SUBSEA7 US LLC',        revenue:  76697.98, loads: 42, avgPerLoad: 1826.14 },
+      { name: 'CH ROBINSON BP',         revenue:  61673.29, loads: 61, avgPerLoad: 1011.04 },
+      { name: 'SABINE ENERGY INC.',     revenue:  44037.76, loads: 24, avgPerLoad: 1834.91 },
+      { name: 'SUPERIOR DELIVERY SVC',  revenue:  34587.65, loads: 27, avgPerLoad: 1281.02 },
+      { name: 'ANADARKO OFFSHORE',      revenue:  25648.02, loads: 32, avgPerLoad:  801.50 },
+      { name: 'SHELL',                  revenue:  20937.07, loads: 26, avgPerLoad:  805.27 },
+      { name: 'OPTIMIZED PROCESS DES.', revenue:  14762.08, loads: 17, avgPerLoad:  868.36 },
+    ],
+    topDrivers: [
+      // Carlos Bautista: team load with co-driver → revenue split 50/50
+      { name: 'Wilbert Hypolite', terminal: 'LOU', loads: 4,  revenue: 11177.44, pay: 2213.97, type: 'OO' },
+      { name: 'Carlos Bautista',  terminal: 'HOU', loads: 1,  revenue:  5321.96, pay: null,    type: 'Company' },
+      { name: 'Jerome Williams',  terminal: 'LOU', loads: 5,  revenue:  9918.57, pay:  646.49, type: 'Company' },
+      { name: 'Justin Wood',      terminal: 'HOU', loads: 5,  revenue:  8821.33, pay:  837.77, type: 'OO' },
+      { name: 'Timothy Webb',     terminal: 'HOU', loads: 3,  revenue:  8578.68, pay:  281.72, type: 'Company' },
+      { name: 'Tomasz Gwadera',   terminal: 'HOU', loads: 5,  revenue:  8357.83, pay: 3016.56, type: 'OO' },
+      { name: 'Rogelio Ramirez',  terminal: 'HOU', loads: 5,  revenue:  8336.58, pay:  876.00, type: 'Company' },
+      { name: 'Marvin Bell',      terminal: 'HOU', loads: 5,  revenue:  8336.58, pay:  943.38, type: 'Company' },
+      { name: 'Danny Bascle',     terminal: 'LOU', loads: 7,  revenue:  7237.92, pay: 2910.52, type: 'OO' },
+      { name: 'Dana McDonald',    terminal: 'HOU', loads: 4,  revenue:  7155.33, pay:  292.00, type: 'Company' },
+    ],
+    driverLoads: {
+      'Carlos Bautista': [
+        { order:'20261644', date:'2026-03-25', customer:'CH ROBINSON BP', revenue:5321.96, pay:null, loaded_miles:1200, empty_miles:0, terminal:'HOU' },
+      ],
+      'Wilbert Hypolite': [
+        { order:'20261580', date:'2026-03-26', customer:'SUBSEA7 US LLC',    revenue:2794.36, pay:553.49, loaded_miles:310, empty_miles:110, terminal:'LOU' },
+        { order:'20261512', date:'2026-03-25', customer:'SUBSEA7 US LLC',    revenue:2794.36, pay:553.49, loaded_miles:310, empty_miles:110, terminal:'LOU' },
+        { order:'20261448', date:'2026-03-24', customer:'SHELL',             revenue:2794.36, pay:553.49, loaded_miles:310, empty_miles:110, terminal:'LOU' },
+        { order:'20261390', date:'2026-03-23', customer:'SHELL',             revenue:2794.36, pay:553.50, loaded_miles:310, empty_miles:110, terminal:'LOU' },
+      ],
+      'Jerome Williams': [
+        { order:'20261601', date:'2026-03-26', customer:'SABINE ENERGY INC.', revenue:1983.71, pay:129.30, loaded_miles:198, empty_miles: 82, terminal:'LOU' },
+        { order:'20261533', date:'2026-03-25', customer:'SABINE ENERGY INC.', revenue:1983.71, pay:129.30, loaded_miles:198, empty_miles: 82, terminal:'LOU' },
+        { order:'20261469', date:'2026-03-24', customer:'SUPERIOR DELIVERY SVC',revenue:1983.71,pay:129.30,loaded_miles:198,empty_miles:82, terminal:'LOU' },
+        { order:'20261403', date:'2026-03-23', customer:'ANADARKO OFFSHORE',  revenue:1983.72, pay:129.29, loaded_miles:198, empty_miles: 82, terminal:'LOU' },
+        { order:'20261341', date:'2026-03-23', customer:'ANADARKO OFFSHORE',  revenue:1983.72, pay:129.30, loaded_miles:198, empty_miles: 82, terminal:'LOU' },
+      ],
+    },
+    otd: {
+      by_terminal: {
+        HOU: { total: 463, on_time: 419, late: 44, late_no_reason: 33, avg_mins_late: 354, otd_pct: 90.5 },
+        LOU: { total: 526, on_time: 501, late: 25, late_no_reason: 25, avg_mins_late: 438, otd_pct: 95.2 },
+        DFW: { total:  36, on_time:  27, late:  9, late_no_reason:  4, avg_mins_late: 289, otd_pct: 75.0 },
+        OKC: { total:  26, on_time:  25, late:  1, late_no_reason:  1, avg_mins_late: 120, otd_pct: 96.2 },
+        all: { total:1051, on_time: 972, late: 79, late_no_reason: 63, avg_mins_late: null, otd_pct: 92.5 },
+      },
+      late_reasons: [
+        { reason:'No Reason Code', count:63 },
+        { reason:'Customer Delay',  count: 8 },
+        { reason:'Traffic',         count: 4 },
+        { reason:'Mechanical',      count: 2 },
+        { reason:'Weather',         count: 2 },
+      ],
+      total_late_no_reason: 63,
+    },
+  },
+
+  month: {
+    label: 'Month to Date (Mar 1–27)',
+    terminals: {
+      HOU: { revenue: 990384.39, net_revenue: 812115.20, loads: 732, loaded_miles: 138864, empty_miles:  80155 },
+      LOU: { revenue: 518799.39, net_revenue: 425415.50, loads: 691, loaded_miles:  80343, empty_miles:  57889 },
+      DFW: { revenue:  78691.13, net_revenue:  64526.73, loads:  47, loaded_miles:  17680, empty_miles:      0 },
+      OKC: { revenue:  18289.42, net_revenue:  15017.32, loads:  22, loaded_miles:   3588, empty_miles:   3663 },
+    },
+    topCustomers: [
+      { name: 'CH ROBINSON BP',         revenue: 313566.74, loads: 330, avgPerLoad:  950.20 },
+      { name: 'SUBSEA7 US LLC',          revenue: 244383.39, loads: 146, avgPerLoad: 1673.86 },
+      { name: 'SUPERIOR DELIVERY SVC',   revenue: 163394.08, loads: 139, avgPerLoad: 1175.50 },
+      { name: 'SABINE ENERGY INC.',      revenue: 117327.15, loads:  77, avgPerLoad: 1523.73 },
+      { name: 'SHELL',                   revenue:  98700.39, loads:  87, avgPerLoad: 1134.49 },
+      { name: 'OPTIMIZED PROCESS DES.',  revenue:  71244.60, loads:  63, avgPerLoad: 1130.87 },
+      { name: 'ANADARKO OFFSHORE',       revenue:  61691.24, loads:  92, avgPerLoad:  670.56 },
+      { name: 'TECHNIPFMC',              revenue:  52219.00, loads:  33, avgPerLoad: 1582.39 },
+      { name: 'HALLIBURTON',             revenue:  18365.53, loads:  23, avgPerLoad:  798.50 },
+      { name: 'LINDE/PRAXAIR',           revenue:  12070.26, loads:   9, avgPerLoad: 1341.14 },
+    ],
+    topDrivers: [
+      { name: 'Wilbert Hypolite', terminal: 'LOU', loads:17, revenue: 47604.30, pay: 9420.40, type: 'OO' },
+      { name: 'Carlos Bautista',  terminal: 'HOU', loads: 4, revenue: 21287.84, pay: null,    type: 'Company' },
+      { name: 'Jerome Williams',  terminal: 'LOU', loads:21, revenue: 42241.93, pay: 2754.60, type: 'Company' },
+      { name: 'Justin Wood',      terminal: 'HOU', loads:19, revenue: 37605.50, pay: 3571.60, type: 'OO' },
+      { name: 'Timothy Webb',     terminal: 'HOU', loads:13, revenue: 36584.12, pay: 1201.30, type: 'Company' },
+    ],
+    driverLoads: {},
+    otd: {
+      by_terminal: {
+        HOU: { total:1942, on_time:1718, late:224, late_no_reason:168, avg_mins_late:342, otd_pct: 88.5 },
+        LOU: { total:2187, on_time:2079, late:108, late_no_reason: 97, avg_mins_late:401, otd_pct: 95.1 },
+        DFW: { total: 147, on_time: 110, late: 37, late_no_reason: 17, avg_mins_late:310, otd_pct: 74.8 },
+        OKC: { total: 104, on_time:  99, late:  5, late_no_reason:  4, avg_mins_late:115, otd_pct: 95.2 },
+        all: { total:4380, on_time:4006, late:374, late_no_reason:286, avg_mins_late:null, otd_pct: 91.5 },
+      },
+      late_reasons: [
+        { reason:'No Reason Code', count:286 },
+        { reason:'Customer Delay',  count: 48 },
+        { reason:'Traffic',         count: 21 },
+        { reason:'Mechanical',      count: 12 },
+        { reason:'Weather',         count:  7 },
+      ],
+      total_late_no_reason: 286,
+    },
+  },
+};
+
+// ════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════
+let currentPeriod   = 'today';
+let currentTerminal = 'all';
+
+// ════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════
+const fmt  = v => v != null ? '$' + v.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}) : '—';
+const fmtd = v => v != null ? '$' + v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+const pct  = v => v != null ? v.toFixed(1) + '%' : 'N/A';
+
+function termChip(code) {
+  const t = TERMINALS[code];
+  return t ? `<span class="term-chip term-${code}">${code}</span>` : code;
+}
+function pillHtml(type) {
+  if (type === 'OO')      return '<span class="pill pill-oo">Owner Op</span>';
+  if (type === 'Company') return '<span class="pill pill-co">Company</span>';
+  return '<span class="pill pill-dfo">Lessee</span>';
+}
+
+function aggregateTerminals(period, filter) {
+  const t = DATA[period].terminals;
+  const keys = filter === 'all' ? Object.keys(t) : [filter];
+  return keys.reduce((acc, k) => {
+    if (!t[k]) return acc;
+    acc.revenue      += t[k].revenue;
+    acc.loads        += t[k].loads;
+    acc.loaded_miles += t[k].loaded_miles;
+    acc.empty_miles  += t[k].empty_miles;
+    return acc;
+  }, { revenue: 0, loads: 0, loaded_miles: 0, empty_miles: 0 });
+}
+
+// ════════════════════════════════════════
+// SETTERS
+// ════════════════════════════════════════
+function setTerminal(code, btn) {
+  currentTerminal = code;
+  document.querySelectorAll('#terminalGroup button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+function setPeriod(period, btn) {
+  currentPeriod = period;
+  document.querySelectorAll('#periodGroup button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+// ════════════════════════════════════════
+// RENDER
+// ════════════════════════════════════════
+function render() {
+  const d   = DATA[currentPeriod];
+  const agg = aggregateTerminals(currentPeriod, currentTerminal);
+  const lbl = d.label;
+
+  // ── Terminal strip ──
+  const strip = document.getElementById('terminalStrip');
+  strip.innerHTML = Object.entries(TERMINALS).map(([code, t]) => {
+    const td = d.terminals[code];
+    const totalMi = td.loaded_miles + td.empty_miles;
+    const lpct = totalMi > 0 ? (td.loaded_miles / totalMi * 100).toFixed(0) + '% loaded' : '—';
+    const active = currentTerminal === code ? 'box-shadow:0 0 0 2px ' + t.color + ';' : '';
+    return `<div class="terminal-card ${t.css}" style="${active}cursor:pointer;" onclick="setTerminalByCode('${code}')">
+      <div class="terminal-name">${code} &nbsp;<span style="font-weight:400;text-transform:none;letter-spacing:0;">${t.label}</span></div>
+      <div class="terminal-city">${t.city}</div>
+      <div class="terminal-rev">${fmt(td.revenue)}</div>
+      <div class="net-rev">Net ex-FSC: <span>${fmt(td.net_revenue || td.revenue)}</span></div>
+      <div class="terminal-meta">${td.loads} loads &nbsp;·&nbsp; ${lpct}</div>
+    </div>`;
+  }).join('');
+
+  // ── KPIs ──
+  const totalMi = agg.loaded_miles + agg.empty_miles;
+  const rpm     = totalMi > 0 ? agg.revenue / totalMi : null;
+  const lpct    = totalMi > 0 ? agg.loaded_miles / totalMi * 100 : null;
+
+  document.getElementById('kpiRevenue').textContent   = fmt(agg.revenue);
+  document.getElementById('kpiRevSub').textContent    = agg.loads + ' loads dispatched';
+  document.getElementById('kpiLoads').textContent     = agg.loads.toLocaleString();
+  document.getElementById('kpiLoadsSub').textContent  = lbl;
+  document.getElementById('kpiRPM').textContent       = fmtd(rpm);
+  document.getElementById('kpiLoadedPct').textContent = pct(lpct);
+  document.getElementById('kpiMilesSub').textContent  = agg.loaded_miles.toLocaleString() + ' loaded / ' + agg.empty_miles.toLocaleString() + ' empty';
+
+  // ── Period labels ──
+  ['fleetChartPeriod','custChartPeriod','driverPeriodLabel','custPeriodLabel','driverTablePeriod','otdReasonPeriod','brokeredPeriodLabel']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = lbl; });
+
+  // ── Terminal Revenue Chart ──
+  const termKeys   = Object.keys(TERMINALS);
+  const termLabels = termKeys.map(k => `${k} – ${TERMINALS[k].label}`);
+  const termVals   = termKeys.map(k => d.terminals[k].revenue);
+  const termColors = termKeys.map(k => TERMINALS[k].color);
+  updateBarChart('fleetChart', termLabels, termVals, termColors, 'Revenue by Terminal');
+
+  // ── Customer data source: use per-terminal slice when a terminal is selected ──
+  const custSource = (currentTerminal !== 'all' && d.terminalCustomers && d.terminalCustomers[currentTerminal] && d.terminalCustomers[currentTerminal].length)
+    ? d.terminalCustomers[currentTerminal]
+    : d.topCustomers;
+
+  // ── Top 7 Customers chart ──
+  const topC = custSource.slice(0,7);
+  updateHorizBarChart('custChart',
+    topC.map(c => c.name.replace(' INC.','').replace(' US LLC','').replace(' OFFSHORE','')),
+    topC.map(c => c.revenue));
+
+  // ── Filter drivers by terminal ──
+  const drivers = currentTerminal === 'all'
+    ? d.topDrivers
+    : d.topDrivers.filter(dr => dr.terminal === currentTerminal);
+
+  renderPerformerCards('topDriverCards',  drivers.slice(0,3), 'driver');
+  renderPerformerCards('topCustCards',    custSource.slice(0,3), 'customer');
+
+  // ── OTD ──
+  renderOTD(d.otd || null);
+
+  // ── Driver table ──
+  const tbody  = document.getElementById('driverTableBody');
+  const maxRev = Math.max(...drivers.map(dr => dr.revenue));
+  tbody.innerHTML = drivers.map(dr => {
+    const margin = dr.pay != null ? ((dr.revenue - dr.pay) / dr.revenue * 100).toFixed(1) + '%' : '—';
+    const barW   = (dr.revenue / maxRev * 100).toFixed(0);
+    return `<tr style="cursor:pointer;" onclick="openDriverModal('${dr.name.replace(/'/g,"\\'")}')">
+      <td><strong>${dr.name}</strong></td>
+      <td>${pillHtml(dr.type)}</td>
+      <td>${termChip(dr.terminal)}</td>
+      <td style="text-align:center;">${dr.loads}</td>
+      <td>
+        <div class="pay-bar-wrap">
+          <span style="font-weight:700;color:#0f2240;min-width:70px;">${fmt(dr.revenue)}</span>
+          <div class="pay-bar"><div class="pay-bar-fill" style="width:${barW}%"></div></div>
+        </div>
+      </td>
+      <td style="color:#64748b;">${dr.pay != null ? fmt(dr.pay) : '<span style="color:#d97706;font-size:0.68rem;" title="Run Compute Pay in TMW">⚙ Compute Pay</span>'}</td>
+      <td style="font-weight:600;color:${dr.pay != null ? '#16a34a' : '#94a3b8'};">${margin}</td>
+      <td style="color:#64748b;">${fmt(dr.revenue / dr.loads)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:16px;">No driver data for selected terminal</td></tr>';
+
+  // ── Attention panel ──
+  renderAttentionPanel(drivers, d.otd || null);
+
+  // ── Brokered loads table ──
+  renderBrokeredTable(d.brokeredLoads || null);
+
+  // ── Cancelled / Turned-Down loads (period-aware) ──
+  renderCancelledLoads();
+}
+
+// ════════════════════════════════════════
+// BROKERED LOADS TABLE
+// ════════════════════════════════════════
+function renderBrokeredTable(brokered) {
+  const tbody  = document.getElementById('brokeredTableBody');
+  const kpisEl = document.getElementById('brokerKpis');
+  if (!tbody) return;
+
+  if (!brokered || !brokered.all) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:16px;">No brokered load data available</td></tr>';
+    return;
+  }
+
+  const all = brokered.all;
+  const mc  = all.margin_pct >= 15 ? '#16a34a' : all.margin_pct >= 5 ? '#d97706' : '#dc2626';
+
+  // ── KPI mini-cards ──────────────────────────────────────────────────────────
+  if (kpisEl) {
+    kpisEl.innerHTML = [
+      { label: 'Total Loads',   val: all.loads.toLocaleString(),       color: '#3b82f6' },
+      { label: 'Total Revenue', val: fmtd(all.revenue),                color: '#0f2240' },
+      { label: 'Carrier Cost',  val: fmtd(all.carrier_cost),           color: '#64748b' },
+      { label: 'Net Profit',    val: fmtd(all.profit),                 color: all.profit >= 0 ? '#16a34a' : '#dc2626' },
+      { label: 'Margin',        val: all.margin_pct.toFixed(1) + '%',  color: mc },
+    ].map(k => `
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 16px;min-width:110px;">
+        <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">${k.label}</div>
+        <div style="font-size:1.05rem;font-weight:700;color:${k.color};">${k.val}</div>
+      </div>`).join('');
+  }
+
+  // ── Customer rows ────────────────────────────────────────────────────────────
+  const customers = brokered.customers || [];
+  if (customers.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:16px;">No brokered loads for this period</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = customers.map(c => {
+    const cmc  = c.margin_pct >= 15 ? '#16a34a' : c.margin_pct >= 5 ? '#d97706' : '#dc2626';
+    const safe = c.customer.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<tr style="cursor:pointer;" onclick="openBrokerCustomerModal('${safe}')">
+      <td><strong>${c.customer}</strong></td>
+      <td style="text-align:center;">${c.loads}</td>
+      <td style="text-align:right;">${fmtd(c.revenue)}</td>
+      <td style="text-align:right;color:#64748b;">${fmtd(c.carrier_cost)}</td>
+      <td style="text-align:right;font-weight:700;color:${c.profit >= 0 ? '#16a34a' : '#dc2626'};">${fmtd(c.profit)}</td>
+      <td style="text-align:center;font-weight:600;color:${cmc};">${c.margin_pct.toFixed(1)}%</td>
+    </tr>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════
+// BROKER CUSTOMER DRILL-DOWN MODAL
+// ════════════════════════════════════════
+function openBrokerCustomerModal(customerName) {
+  const d        = DATA[currentPeriod];
+  const allLoads = (d.brokeredLoads || {}).loads || [];
+  const loads    = allLoads.filter(l => l.customer === customerName);
+
+  const revenue = loads.reduce((s, l) => s + l.revenue,      0);
+  const cost    = loads.reduce((s, l) => s + l.carrier_cost, 0);
+  const profit  = revenue - cost;
+  const margin  = revenue ? profit / revenue * 100 : 0;
+  const mc      = margin >= 15 ? '#16a34a' : margin >= 5 ? '#d97706' : '#dc2626';
+
+  document.getElementById('modalTitle').textContent    = customerName;
+  document.getElementById('modalSubtitle').textContent =
+    `Brokered Loads — ${loads.length} order${loads.length !== 1 ? 's' : ''}`;
+
+  document.getElementById('modalKpis').innerHTML = [
+    { label: 'Revenue',      val: fmtd(revenue)                                           },
+    { label: 'Carrier Cost', val: fmtd(cost),            color: '#64748b'                 },
+    { label: 'Net Profit',   val: fmtd(profit),          color: profit >= 0 ? '#16a34a' : '#dc2626' },
+    { label: 'Margin',       val: margin.toFixed(1)+'%', color: mc                        },
+  ].map(k => `
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 16px;min-width:110px;">
+      <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">${k.label}</div>
+      <div style="font-size:1.05rem;font-weight:700;color:${k.color || '#0f2240'};">${k.val}</div>
+    </div>`).join('');
+
+  if (loads.length === 0) {
+    document.getElementById('modalBody').innerHTML =
+      '<p style="color:#94a3b8;text-align:center;padding:20px;">No load detail available for this period.</p>';
+  } else {
+    document.getElementById('modalBody').innerHTML = `
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Order #</th>
+            <th>Carrier</th>
+            <th>Terminal</th>
+            <th style="text-align:right;">Revenue</th>
+            <th style="text-align:right;">Carrier Cost</th>
+            <th style="text-align:right;">Net Profit</th>
+            <th style="text-align:center;">Margin %</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${loads.map(l => {
+            const lmc = l.margin_pct >= 15 ? '#16a34a' : l.margin_pct >= 5 ? '#d97706' : '#dc2626';
+            return `<tr>
+              <td style="color:#64748b;">${l.date}</td>
+              <td><strong>${l.order}</strong></td>
+              <td>${l.carrier}</td>
+              <td>${termChip(l.terminal)}</td>
+              <td style="text-align:right;">${fmtd(l.revenue)}</td>
+              <td style="text-align:right;color:#64748b;">${fmtd(l.carrier_cost)}</td>
+              <td style="text-align:right;font-weight:700;color:${l.profit >= 0 ? '#16a34a' : '#dc2626'};">${fmtd(l.profit)}</td>
+              <td style="text-align:center;font-weight:600;color:${lmc};">${l.margin_pct.toFixed(1)}%</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  }
+  document.getElementById('drillModal').style.display = 'block';
+}
+
+function setTerminalByCode(code) {
+  const btn = [...document.querySelectorAll('#terminalGroup button')]
+    .find(b => b.textContent === code);
+  if (btn) setTerminal(code, btn);
+}
+
+// ════════════════════════════════════════
+// PERFORMER CARDS
+// ════════════════════════════════════════
+function renderPerformerCards(containerId, items, type) {
+  const el = document.getElementById(containerId);
+  if (!items.length) { el.innerHTML = '<div style="color:#94a3b8;font-size:0.8rem;padding:8px 0;">No data for selected terminal</div>'; return; }
+  el.innerHTML = items.map((item, i) => {
+    const subline = type === 'driver'
+      ? termChip(item.terminal) + ` &nbsp;|&nbsp; ${item.loads} load${item.loads !== 1 ? 's' : ''}`
+      : item.loads + ' loads &nbsp;|&nbsp; Avg ' + fmtd(item.avgPerLoad) + '/load';
+    const clickAttr = type === 'driver'
+      ? `style="cursor:pointer;" onclick="openDriverModal('${item.name.replace(/'/g,"\\'")}')"`
+      : `style="cursor:pointer;" onclick="openCustomerModal('${item.name.replace(/'/g,"\\'")}')"` ;
+    return `<div class="performer-card" ${clickAttr}>
+      <div class="rank-badge rank-${i+1}">#${i+1}</div>
+      <div class="performer-info">
+        <div class="performer-name">${item.name}</div>
+        <div class="performer-detail">${subline}</div>
+      </div>
+      <div class="performer-rev">${fmt(item.revenue)}</div>
+    </div>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════
+// CHARTS
+// ════════════════════════════════════════
+function updateBarChart(id, labels, data, colors, label) {
+  const ctx = document.getElementById(id).getContext('2d');
+  if (window[id+'_c']) window[id+'_c'].destroy();
+  window[id+'_c'] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label, data, backgroundColor: colors, borderRadius: 6, borderSkipped: false }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + fmt(c.raw) } } },
+      scales: {
+        y: { ticks: { callback: v => '$'+(v>=1000?(v/1000).toFixed(0)+'k':v), font:{size:10} }, grid:{color:'#f1f5f9'} },
+        x: { ticks: { font:{size:10} }, grid:{display:false} }
+      }
+    }
+  });
+}
+
+function updateHorizBarChart(id, labels, data) {
+  const ctx = document.getElementById(id).getContext('2d');
+  if (window[id+'_c']) window[id+'_c'].destroy();
+  const colors = ['#1d4ed8','#0891b2','#7c3aed','#059669','#d97706','#dc2626','#6366f1','#0ea5e9','#84cc16','#f43f5e'];
+  window[id+'_c'] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: colors.slice(0,data.length), borderRadius: 4, borderSkipped: false }] },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + fmt(c.raw) } } },
+      scales: {
+        x: { ticks: { callback: v => '$'+(v>=1000?(v/1000).toFixed(0)+'k':v), font:{size:10} }, grid:{color:'#f1f5f9'} },
+        y: { ticks: { font:{size:10} }, grid:{display:false} }
+      }
+    }
+  });
+}
+
+// ════════════════════════════════════════
+// ATTENTION PANEL
+// ════════════════════════════════════════
+function renderAttentionPanel(drivers, otd) {
+  const el = document.getElementById('attentionPanel');
+  if (!el) return;
+  const cpCount  = (drivers||[]).filter(d => d.pay == null).length;
+  const key      = currentTerminal === 'all' ? 'all' : currentTerminal;
+  const noReason = otd?.by_terminal?.[key]?.late_no_reason || 0;
+  const items    = [];
+  if (cpCount  > 0) items.push(`<div style="padding:8px 10px;background:#fffbeb;border-radius:6px;border-left:3px solid #d97706;margin-bottom:6px;font-size:0.78rem;color:#92400e;">
+    <strong>${cpCount}</strong> driver${cpCount!==1?'s need':'needs'} Compute Pay run in TMW</div>`);
+  if (noReason > 0) items.push(`<div style="padding:8px 10px;background:#fffbeb;border-radius:6px;border-left:3px solid #d97706;margin-bottom:6px;font-size:0.78rem;color:#92400e;">
+    <strong>${noReason}</strong> late stop${noReason!==1?'s are':' is'} missing a reason code in TMW</div>`);
+  if (!items.length) items.push(`<div style="font-size:0.78rem;color:#16a34a;padding:8px 0;">✓ No action items</div>`);
+  el.innerHTML = items.join('');
+}
+
+// ════════════════════════════════════════
+// DRIVER DRILL-DOWN MODAL
+// ════════════════════════════════════════
+function openDriverModal(driverName) {
+  const d      = DATA[currentPeriod];
+  const loads  = (d.driverLoads || {})[driverName] || [];
+  const driver = (d.topDrivers  || []).find(dr => dr.name === driverName) || {};
+
+  document.getElementById('modalTitle').textContent    = driverName;
+  document.getElementById('modalSubtitle').textContent =
+    `${d.label}  ·  ${pillText(driver.type)}  ·  ${TERMINALS[driver.terminal]?.city || driver.terminal || ''}`;
+
+  const totalRev   = loads.reduce((s,l) => s + l.revenue, 0) || (driver.revenue || 0);
+  const totalLoads = loads.length || (driver.loads || 0);
+  const totalMiles = loads.reduce((s,l) => s + (l.loaded_miles||0) + (l.empty_miles||0), 0);
+
+  document.getElementById('modalKpis').innerHTML = [
+    { label:'Revenue',     val: fmt(totalRev),                   color:'#16a34a' },
+    { label:'Loads',       val: totalLoads.toLocaleString(),      color:'' },
+    { label:'Total Miles', val: totalMiles ? totalMiles.toLocaleString() : '—', color:'' },
+    { label:'Avg/Load',    val: fmt(totalLoads ? totalRev/totalLoads : 0), color:'' },
+  ].map(k => `<div style="background:#f8fafc;border-radius:8px;padding:10px 16px;min-width:110px;flex:1;">
+    <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">${k.label}</div>
+    <div style="font-size:1.15rem;font-weight:800;color:${k.color||'#0f2240'};margin-top:3px;">${k.val}</div>
+  </div>`).join('');
+
+  if (!loads.length) {
+    document.getElementById('modalBody').innerHTML =
+      `<div style="text-align:center;color:#94a3b8;padding:24px 0;font-size:0.85rem;">
+        Detailed load records will appear here after the data updater runs.<br>
+        <span style="font-size:0.75rem;">Run <code>dashboard_data_updater.py</code> to populate load-level drill-down.</span>
+      </div>`;
+  } else {
+    document.getElementById('modalBody').innerHTML = `
+      <table class="data-table" style="min-width:620px;">
+        <thead><tr>
+          <th>Date</th><th>Order #</th><th>Customer</th><th>Terminal</th>
+          <th>Revenue</th><th>Pay</th><th>Miles</th>
+        </tr></thead>
+        <tbody>
+          ${[...loads].sort((a,b)=>b.date.localeCompare(a.date)).map(l => {
+            const totalMi = (l.loaded_miles||0) + (l.empty_miles||0);
+            return `<tr>
+              <td>${l.date}</td>
+              <td style="font-family:monospace;font-size:0.75rem;color:#64748b;">${l.order}</td>
+              <td>${l.customer}</td>
+              <td>${termChip(l.terminal)}</td>
+              <td style="font-weight:700;color:#0f2240;">${fmt(l.revenue)}</td>
+              <td>${l.pay!=null ? fmt(l.pay) : '<span style="color:#d97706;font-size:0.68rem;" title="Run Compute Pay in TMW">⚙ Compute Pay</span>'}</td>
+              <td style="color:#64748b;">${totalMi ? totalMi.toLocaleString() : '—'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  }
+  document.getElementById('drillModal').style.display = 'block';
+}
+
+// ════════════════════════════════════════
+// CUSTOMER DRILL-DOWN MODAL
+// ════════════════════════════════════════
+function openCustomerModal(customerName) {
+  const d      = DATA[currentPeriod];
+  const loads  = (d.customerLoads || {})[customerName] || [];
+  const cust   = (d.topCustomers  || []).find(c => c.name === customerName) || {};
+
+  document.getElementById('modalTitle').textContent    = customerName;
+  document.getElementById('modalSubtitle').textContent = d.label + '  ·  Customer Revenue Detail';
+
+  const totalRev   = loads.reduce((s,l) => s + l.revenue, 0) || (cust.revenue || 0);
+  const totalLoads = loads.length || (cust.loads || 0);
+  const totalMiles = loads.reduce((s,l) => s + (l.loaded_miles||0) + (l.empty_miles||0), 0);
+
+  document.getElementById('modalKpis').innerHTML = [
+    { label:'Revenue',     val: fmt(totalRev),                           color:'#16a34a' },
+    { label:'Loads',       val: totalLoads.toLocaleString(),              color:'' },
+    { label:'Total Miles', val: totalMiles ? totalMiles.toLocaleString() : '—', color:'' },
+    { label:'Avg/Load',    val: fmt(totalLoads ? totalRev/totalLoads : 0), color:'' },
+  ].map(k => `<div style="background:#f8fafc;border-radius:8px;padding:10px 16px;min-width:110px;flex:1;">
+    <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">${k.label}</div>
+    <div style="font-size:1.15rem;font-weight:800;color:${k.color||'#0f2240'};margin-top:3px;">${k.val}</div>
+  </div>`).join('');
+
+  if (!loads.length) {
+    document.getElementById('modalBody').innerHTML =
+      `<div style="text-align:center;color:#94a3b8;padding:24px 0;font-size:0.85rem;">No load detail available for this customer in the selected period.</div>`;
+  } else {
+    document.getElementById('modalBody').innerHTML = `
+      <table class="data-table" style="min-width:580px;">
+        <thead><tr>
+          <th>Date</th><th>Order #</th><th>Driver</th><th>Terminal</th>
+          <th>Revenue</th><th>Miles</th>
+        </tr></thead>
+        <tbody>
+          ${[...loads].sort((a,b)=>b.date.localeCompare(a.date)).map(l => {
+            const totalMi = (l.loaded_miles||0) + (l.empty_miles||0);
+            return `<tr>
+              <td>${l.date}</td>
+              <td style="font-family:monospace;font-size:0.75rem;color:#64748b;">${l.order}</td>
+              <td>${l.driver || '—'}</td>
+              <td>${termChip(l.terminal)}</td>
+              <td style="font-weight:700;color:#0f2240;">${fmt(l.revenue)}</td>
+              <td style="color:#64748b;">${totalMi ? totalMi.toLocaleString() : '—'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  }
+  document.getElementById('drillModal').style.display = 'block';
+}
+
+function pillText(type) {
+  if (type === 'OO')      return 'Owner Operator';
+  if (type === 'Company') return 'Company Driver';
+  return 'Lessee';
+}
+
+// ════════════════════════════════════════
+// DRIVER AVAILABILITY TABLE
+// ════════════════════════════════════════
+function renderDriverAvailTable(da) {
+  const tbody = document.getElementById('driverAvailBody');
+  if (!tbody || !da) return;
+  const termOrder = [
+    { code:'HOU' },
+    { code:'LOU' },
+    { code:'DFW' },
+    { code:'OKC' },
+  ];
+  const rows = termOrder.map(t => {
+    const d = da[t.code] || { available:0, driver_total:0 };
+    const availColor = d.available > 0 ? '#16a34a' : '#94a3b8';
+    return `<tr>
+      <td>${termChip(t.code)}</td>
+      <td style="text-align:center;font-weight:700;color:${availColor};">${d.available}</td>
+      <td style="text-align:center;color:#64748b;">${d.driver_total.toLocaleString()}</td>
+    </tr>`;
+  });
+  const all = da.all || {};
+  if (all.available != null) {
+    rows.push(`<tr style="border-top:2px solid #e2e8f0;font-weight:700;background:#f8fafc;">
+      <td>All Terminals</td>
+      <td style="text-align:center;color:#16a34a;">${all.available}</td>
+      <td style="text-align:center;color:#64748b;">${(all.driver_total||0).toLocaleString()}</td>
+    </tr>`);
+  }
+  tbody.innerHTML = rows.join('') || '<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:12px;">No availability data</td></tr>';
+}
+
+// ════════════════════════════════════════
+// ON-TIME DELIVERY
+// ════════════════════════════════════════
+function renderOTD(otd) {
+  const strip      = document.getElementById('otdStrip');
+  const banner     = document.getElementById('otdActionBanner');
+  const actionTxt  = document.getElementById('otdActionText');
+  const reasonPer  = document.getElementById('otdReasonPeriod');
+
+  if (!otd || !otd.by_terminal || !Object.keys(otd.by_terminal).length) {
+    strip.innerHTML = '<div style="color:#94a3b8;font-size:0.8rem;padding:8px 0;">OTD data will appear after the first live data refresh.</div>';
+    banner.style.display = 'none';
+    const ctx = document.getElementById('otdReasonsChart').getContext('2d');
+    if (window.otdReasonsChart_c) { window.otdReasonsChart_c.destroy(); window.otdReasonsChart_c = null; }
+    ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height);
+    ctx.fillStyle = '#94a3b8'; ctx.font = '13px Segoe UI, Arial'; ctx.textAlign = 'center';
+    ctx.fillText('No data yet — run the updater to populate', ctx.canvas.width/2, 100);
+    return;
+  }
+
+  const bt = otd.by_terminal;
+
+  // ── OTD terminal cards (always show all 4 + All for comparison) ──
+  const cardDefs = [
+    ['HOU', 'HOU – Houston'],
+    ['LOU', 'LOU – Houma'],
+    ['DFW', 'DFW – Grand Prairie'],
+    ['OKC', 'OKC – Oklahoma City'],
+    ['all', 'All Terminals'],
+  ];
+  strip.innerHTML = cardDefs.map(([code, label]) => {
+    const td = bt[code] || {};
+    const p  = td.otd_pct;
+    const colorCls  = p == null ? '' : p >= 95 ? 'otd-green' : p >= 85 ? 'otd-amber' : 'otd-red';
+    const topColor  = code === 'all' ? '#0f2240' : (TERMINALS[code]?.color || '#e2e8f0');
+    const highlight = (currentTerminal === code || (currentTerminal === 'all' && code === 'all'))
+      ? `box-shadow:0 0 0 2px ${topColor};` : '';
+    const noRsnHtml = td.late_no_reason > 0
+      ? `<div style="font-size:0.68rem;color:#d97706;margin-top:3px;font-weight:600;">⚠ ${td.late_no_reason} missing code</div>`
+      : (td.late > 0 ? `<div style="font-size:0.68rem;color:#16a34a;margin-top:3px;">✓ All coded</div>` : '');
+    return `<div class="otd-card" style="border-top-color:${topColor};${highlight}">
+      <div class="otd-card-label">${label}</div>
+      <div class="otd-pct ${colorCls}">${p != null ? p.toFixed(1)+'%' : '—'}</div>
+      <div style="font-size:0.72rem;color:#94a3b8;">${(td.on_time||0)} / ${(td.total||0)} stops</div>
+      ${noRsnHtml}
+    </div>`;
+  }).join('');
+
+  // ── Action Required banner ──
+  const noReasonCount = currentTerminal === 'all'
+    ? (bt.all?.late_no_reason || 0)
+    : (bt[currentTerminal]?.late_no_reason || 0);
+  if (noReasonCount > 0) {
+    banner.style.display = 'flex';
+    let perTermDetail = '';
+    if (currentTerminal === 'all') {
+      const parts = ['HOU','LOU','DFW','OKC']
+        .filter(t => (bt[t]?.late_no_reason||0) > 0)
+        .map(t => `<strong>${t}:</strong> ${bt[t].late_no_reason} stop${bt[t].late_no_reason !== 1 ? 's' : ''}`);
+      if (parts.length) perTermDetail = `<div style="margin-top:5px;font-size:0.75rem;">${parts.join(' &nbsp;&nbsp; ')}</div>`;
+    }
+    actionTxt.innerHTML = `<div><strong>Dispatcher Action Required:</strong> ${noReasonCount} late stop${noReasonCount !== 1 ? 's are' : ' is'} missing a Late Arrival Reason Code.${perTermDetail}</div>
+      <div style="margin-top:6px;font-size:0.75rem;color:#78350f;">In TMW: open the order &rarr; right-click the late stop &rarr; <strong>Late Arrival Reason</strong> &rarr; select a code.</div>`;
+  } else {
+    banner.style.display = 'none';
+  }
+
+  // ── Late reasons chart ──
+  if (reasonPer) {
+    const dwDate = otd.dw_date ? new Date(otd.dw_date + 'T00:00:00') : null;
+    const dwLabel = dwDate ? dwDate.toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+    const basePeriodLabel = DATA[currentPeriod]?.label || '';
+    reasonPer.textContent = (dwLabel && currentPeriod === 'today')
+      ? `Today (${dwLabel})`
+      : basePeriodLabel;
+  }
+  const reasons = otd.late_reasons || [];
+  const ctx = document.getElementById('otdReasonsChart').getContext('2d');
+  if (window.otdReasonsChart_c) { window.otdReasonsChart_c.destroy(); window.otdReasonsChart_c = null; }
+  if (reasons.length) {
+    const top8 = reasons.slice(0,8);
+    window.otdReasonsChart_c = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: top8.map(r => r.reason),
+        datasets: [{
+          data: top8.map(r => r.count),
+          backgroundColor: top8.map(r => r.reason === 'No Reason Code' ? '#fca5a5' : '#93c5fd'),
+          borderRadius: 4, borderSkipped: false,
+        }],
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => ` ${c.raw} stop${c.raw !== 1 ? 's' : ''}` } },
+        },
+        scales: {
+          x: { ticks: { font:{size:10} }, grid:{color:'#f1f5f9'} },
+          y: { ticks: { font:{size:10} }, grid:{display:false} },
+        },
+      },
+    });
+  } else {
+    ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height);
+    ctx.fillStyle = '#94a3b8'; ctx.font = '13px Segoe UI, Arial'; ctx.textAlign = 'center';
+    ctx.fillText('No late stops in this period', ctx.canvas.width/2, 110);
+  }
+}
+
+// ════════════════════════════════════════
+// CANCELLED / TURNED-DOWN LOADS
+// ════════════════════════════════════════
+let CANCEL_DATA = {};
+
+function renderCancelledLoads() {
+  // Support both period-keyed {today,week,month} and flat (legacy) shape
+  const cd = (CANCEL_DATA && CANCEL_DATA[currentPeriod]) ? CANCEL_DATA[currentPeriod] : CANCEL_DATA;
+
+  // Always reset to summary panel when period changes
+  const elp = id => document.getElementById(id);
+  if (elp('cancelPanelDetail'))  elp('cancelPanelDetail').style.display  = 'none';
+  if (elp('cancelPanelSummary')) elp('cancelPanelSummary').style.display = 'block';
+
+  if (!cd || !cd.totals) return;
+  const t = cd.totals;
+  const el = id => document.getElementById(id);
+
+  // Update section label and subtitle to reflect current period
+  const periodLabels = { today: 'Today', week: 'Last 7 Days', month: 'Month to Date' };
+  const periodLabel = periodLabels[currentPeriod] || '';
+  if (el('cancelSectionLabel')) el('cancelSectionLabel').textContent = `Turned Down / Cancelled Loads — ${periodLabel}`;
+  if (el('cancelSubtitle'))     el('cancelSubtitle').textContent     = `Shell & BP EDI tenders · ${periodLabel.toLowerCase()}`;
+
+  if (el('canOXY'))        el('canOXY').textContent        = (t.oxy   || 0).toLocaleString();
+  if (el('canShell'))      el('canShell').textContent      = (t.shell || 0).toLocaleString();
+  if (el('canBP'))         el('canBP').textContent         = (t.bp || 0).toLocaleString();
+  if (el('canDeclined'))   el('canDeclined').textContent   = (t.turned_down || 0).toLocaleString();
+
+  // Equipment types that are grouped regardless of trailer (all trailers are the same unit)
+  const SINGLE_EQUIP = new Set(['Oneton', 'Minifloat', 'Pickup']);
+
+  // Group summary rows — SINGLE_EQUIP types key by equip_type only; others by equip+trailer
+  const grouped = {};
+  (cd.summary || []).forEach(r => {
+    const isSingle = SINGLE_EQUIP.has(r.equip_type);
+    const key = isSingle ? r.equip_type : r.equip_type + '||' + r.trailer_type;
+    const trailer = isSingle ? '—' : r.trailer_type;
+    if (!grouped[key]) grouped[key] = { equip_type: r.equip_type, trailer_type: trailer, isSingle, shell: 0, bp: 0, total: 0, turned_down: 0 };
+    if (r.customer === 'Shell') grouped[key].shell += r.load_count;
+    else if (r.customer === 'BP') grouped[key].bp += r.load_count;
+    grouped[key].total      += r.load_count;
+    grouped[key].turned_down += r.turned_down;
+  });
+
+  const rows = Object.values(grouped).sort((a,b) => b.total - a.total);
+  const tbody = el('cancelSummaryBody');
+  if (!tbody) return;
+  tbody.innerHTML = rows.map((r, i) => `
+    <tr onclick="openCancelDetail('${r.equip_type}','${r.isSingle ? '' : r.trailer_type}')"
+        style="border-bottom:1px solid #f1f5f9;cursor:pointer;background:${i%2===0?'#fff':'#fafafa'};"
+        onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='${i%2===0?'#fff':'#fafafa'}'">
+      <td style="padding:8px 10px;font-weight:600;color:#0f2240;">${r.equip_type}</td>
+      <td style="padding:8px 10px;color:#475569;">${r.trailer_type}</td>
+      <td style="padding:8px 10px;text-align:center;">${r.shell}</td>
+      <td style="padding:8px 10px;text-align:center;">${r.bp}</td>
+      <td style="padding:8px 10px;text-align:center;font-weight:600;">${r.total}</td>
+      <td style="padding:8px 10px;text-align:center;color:${r.turned_down>0?'#c2410c':'#64748b'};font-weight:${r.turned_down>0?'700':'400'};">${r.turned_down}</td>
+    </tr>`).join('');
+}
+
+function openCancelDetail(equipType, trailerType) {
+  const cd = (CANCEL_DATA && CANCEL_DATA[currentPeriod]) ? CANCEL_DATA[currentPeriod] : CANCEL_DATA;
+  if (!cd || !cd.detail) return;
+
+  let rows = cd.detail;
+  let title = 'All Cancelled Loads — Detail';
+  if (equipType) {
+    if (trailerType) {
+      // Normal: filter by both equip and trailer
+      rows = rows.filter(r => r.equip_type === equipType && r.trailer_type === trailerType);
+      title = `${equipType} / ${trailerType} — Cancelled Loads`;
+    } else {
+      // Single-unit equipment type (Oneton, Minifloat, Pickup) — filter by equip only
+      rows = rows.filter(r => r.equip_type === equipType);
+      title = `${equipType} — Cancelled Loads`;
+    }
+  }
+
+  const el = id => document.getElementById(id);
+  if (el('cancelDetailTitle')) el('cancelDetailTitle').textContent = title;
+
+  const reasonColor = r => {
+    if (r.reason && r.reason.includes('DRIVER')) return '#c2410c';
+    if (r.reason && r.reason.includes('POWER'))  return '#d97706';
+    return '#475569';
+  };
+
+  const tbody = el('cancelDetailBody');
+  if (!tbody) return;
+  tbody.innerHTML = rows.map((r, i) => `
+    <tr style="border-bottom:1px solid #f1f5f9;background:${i%2===0?'#fff':'#fafafa'};">
+      <td style="padding:6px 10px;font-weight:600;color:#0f2240;white-space:nowrap;">${r.order_num}</td>
+      <td style="padding:6px 10px;white-space:nowrap;">
+        <span style="font-size:0.68rem;font-weight:700;padding:2px 7px;border-radius:10px;
+          background:${r.customer==='Shell'?'#fff0f0':'#f0f4ff'};
+          color:${r.customer==='Shell'?'#dc2626':'#2563eb'};">${r.customer}</span>
+      </td>
+      <td style="padding:6px 10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.shipper}">${r.shipper}</td>
+      <td style="padding:6px 10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.consignee}">${r.consignee}</td>
+      <td style="padding:6px 10px;white-space:nowrap;color:#475569;">${r.pickup_dt || '—'}</td>
+      <td style="padding:6px 10px;white-space:nowrap;color:#475569;">${r.delivery_dt || '—'}</td>
+      <td style="padding:6px 10px;white-space:nowrap;color:#475569;">${r.tendered_dt || '—'}</td>
+      <td style="padding:6px 10px;white-space:nowrap;">${r.equip_type}</td>
+      <td style="padding:6px 10px;white-space:nowrap;">${r.trailer_type}</td>
+      <td style="padding:6px 10px;white-space:nowrap;">${r.terminal}</td>
+      <td style="padding:6px 10px;white-space:nowrap;font-weight:600;color:${reasonColor(r)};">${r.reason}</td>
+    </tr>`).join('');
+
+  if (el('cancelPanelSummary')) el('cancelPanelSummary').style.display = 'none';
+  if (el('cancelPanelDetail'))  el('cancelPanelDetail').style.display  = 'block';
+}
+
+function closeCancelDetail() {
+  const el = id => document.getElementById(id);
+  if (el('cancelPanelDetail'))  el('cancelPanelDetail').style.display  = 'none';
+  if (el('cancelPanelSummary')) el('cancelPanelSummary').style.display = 'block';
+}
+
+// ════════════════════════════════════════
+// TREND CHART — Company total + terminal drill-down
+// ════════════════════════════════════════
+let TREND_DATA = {};  // populated from window.__DASHBOARD_DATA__.trends
+
+const LOGO_RED     = '#c8102e';
+const TERM_COLORS  = { HOU:'#2563eb', LOU:'#16a34a', DFW:'#d97706', OKC:'#9333ea' };
+const TERM_LABELS  = { HOU:'Houston', LOU:'Louisiana', DFW:'Dallas/Fort Worth', OKC:'Oklahoma City' };
+
+function fmtM(v) {
+  if (!v && v !== 0) return '—';
+  if (v >= 1000000) return '$' + (v/1000000).toFixed(2) + 'M';
+  return '$' + Math.round(v).toLocaleString();
+}
+function pctBadge(a, b) {
+  if (!b || b === 0) return { html:'—', color:'#64748b' };
+  const pct = ((a - b) / b * 100).toFixed(1);
+  const up  = parseFloat(pct) >= 0;
+  return {
+    html:  (up ? '▲' : '▼') + ' ' + Math.abs(pct) + '%',
+    color: up ? '#16a34a' : '#dc2626',
+  };
+}
+
+function renderTrendChart() {
+  const td = TREND_DATA;
+  if (!td || !td.history) return;
+
+  const history = td.history || [];
+  const cur     = td.current || {};
+  const ytd     = td.ytd    || {};
+
+  // Show full history (all months)
+  const hist14 = history;
+  const labels  = [...hist14.map(m => m.label), cur.label || 'Current'];
+  const CIDX    = labels.length - 1;
+
+  // ── Company solid line (completed months) ──
+  const compSolid = hist14.map(m => m.total);
+  compSolid.push(null);  // null at current month slot
+
+  // ── Dashed bridge: last complete month → projected ──
+  const lastVal   = hist14.length ? hist14[hist14.length - 1].total : 0;
+  const projTotal = cur.projected ? cur.projected.total : 0;
+  const compBridge = labels.map((_, i) => {
+    if (i === CIDX - 1) return lastVal;
+    if (i === CIDX)     return projTotal;
+    return null;
+  });
+
+  // Y-axis floor: 10% below minimum
+  const allVals = compSolid.filter(v => v !== null).concat(projTotal || []);
+  const yMin    = allVals.length ? Math.floor(Math.min(...allVals) * 0.90 / 50000) * 50000 : 0;
+
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  if (window._trendChart_c) window._trendChart_c.destroy();
+  window._trendChart_c = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Total Revenue',
+          data: compSolid,
+          borderColor: LOGO_RED, backgroundColor: LOGO_RED,
+          borderWidth: 3, pointRadius: 4, pointHoverRadius: 7,
+          pointBackgroundColor: LOGO_RED, tension: 0.35, spanGaps: false,
+        },
+        {
+          label: 'Projected',
+          data: compBridge,
+          borderColor: LOGO_RED, backgroundColor: 'transparent',
+          borderWidth: 2.5, borderDash: [7,4],
+          pointRadius: compBridge.map((_,i) => i===CIDX ? 7 : 0),
+          pointBackgroundColor: '#fff', pointBorderColor: LOGO_RED, pointBorderWidth: 2.5,
+          tension: 0.35, spanGaps: false,
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      onClick: () => openTrendDrillDown(),
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: items => items[0].index === CIDX
+              ? `${cur.label}  (Day ${cur.days_elapsed} of ${cur.days_in_month})`
+              : items[0].label,
+            label: item => {
+              if (item.raw === null || item.raw === undefined) return null;
+              const tag = item.dataset.label === 'Projected' ? ' (projected)' : '';
+              return `  Total: ${fmtM(item.raw)}${tag}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color:'#f1f5f9' },
+          ticks: {
+            color: ctx => ctx.index === CIDX ? '#0f2240' : '#64748b',
+            font:  ctx => ctx.index === CIDX ? {size:11,weight:'bold'} : {size:11},
+          }
+        },
+        y: {
+          min: yMin,
+          grid: { color:'#f1f5f9' },
+          ticks: { color:'#64748b', font:{size:11}, callback: v => fmtM(v) }
+        }
+      }
+    },
+    plugins: [{
+      id: 'trendBand',
+      beforeDraw(chart) {
+        const {ctx, chartArea, scales} = chart;
+        const x = scales.x.getPixelForValue(CIDX);
+        const w = scales.x.getPixelForValue(1) - scales.x.getPixelForValue(0);
+        ctx.save();
+        ctx.fillStyle = 'rgba(200,16,46,0.05)';
+        ctx.fillRect(x - w*0.5, chartArea.top, w, chartArea.bottom - chartArea.top);
+        ctx.fillStyle = LOGO_RED;
+        ctx.font = 'bold 10px Segoe UI,Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('▼ Current', x, chartArea.top + 10);
+        ctx.restore();
+      }
+    }]
+  });
+
+  // ── Render MTD / YTD KPI tiles ──────────────────────────────────────────────
+  const moName = cur.label || '';
+  const lyMo   = cur.label ? cur.label.replace(/\d{4}/, yr => yr - 1) : 'LY';
+
+  // MTD label
+  const el = id => document.getElementById(id);
+  if (el('trendMtdLabel'))
+    el('trendMtdLabel').textContent = `📅 Month to Date — ${moName} (Day ${cur.days_elapsed} of ${cur.days_in_month})`;
+
+  if (el('trendMtdActualLabel')) el('trendMtdActualLabel').textContent = `${moName} Actual MTD`;
+  if (el('trendMtdActual'))  el('trendMtdActual').textContent  = fmtM(cur.mtd?.total);
+  if (el('trendMtdPct'))     el('trendMtdPct').textContent     = `${Math.round((cur.days_elapsed/cur.days_in_month)*100)}% through month`;
+  if (el('trendMtdProj'))    el('trendMtdProj').textContent    = fmtM(cur.projected?.total);
+  if (el('trendMtdProjSub')) el('trendMtdProjSub').textContent = `Daily run rate × ${cur.days_in_month} days`;
+
+  const lyBadge = pctBadge(cur.mtd?.total, cur.ly_same_period?.total);
+  if (el('trendMtdLyLabel')) el('trendMtdLyLabel').textContent = `vs LY — Same ${cur.days_elapsed} Days`;
+  if (el('trendMtdLy')) { el('trendMtdLy').innerHTML = lyBadge.html; el('trendMtdLy').style.color = lyBadge.color; }
+  if (el('trendMtdLySub')) el('trendMtdLySub').textContent = `${fmtM(cur.ly_same_period?.total)} in ${lyMo}`;
+
+  const lc = ytd.last_complete || {};
+  const lcBadge = pctBadge(lc.total, lc.ly_total);
+  if (el('trendLastCompleteLabel')) el('trendLastCompleteLabel').textContent = `Last Complete Month (${lc.label || ''})`;
+  if (el('trendLastComplete'))  el('trendLastComplete').textContent  = fmtM(lc.total);
+  if (el('trendLastCompleteSub')) { el('trendLastCompleteSub').innerHTML = `vs LY: <span style="color:${lcBadge.color};font-weight:600;">${lcBadge.html}</span>`; }
+
+  // YTD
+  const ytdStart = `Jan 1 – ${moName.split(' ')[0]} ${cur.days_elapsed}, ${cur.yr}`;
+  if (el('trendYtdLabel')) el('trendYtdLabel').textContent = `📆 Year to Date — Jan 1 through ${moName.split(' ')[0]} ${cur.days_elapsed}, ${cur.yr}`;
+  if (el('trendYtdActual'))    el('trendYtdActual').textContent    = fmtM(ytd.actual?.total);
+  if (el('trendYtdActualSub')) el('trendYtdActualSub').textContent = `Jan + completed months + ${moName.split(' ')[0]} ${cur.days_elapsed} days`;
+  if (el('trendYtdProj'))    el('trendYtdProj').textContent    = fmtM(ytd.projected?.total);
+  if (el('trendYtdProjSub')) el('trendYtdProjSub').textContent = `Completing ${moName.split(' ')[0]} at current run rate`;
+
+  const ytdBadge = pctBadge(ytd.actual?.total, ytd.ly_same_period?.total);
+  if (el('trendYtdLy')) { el('trendYtdLy').innerHTML = ytdBadge.html; el('trendYtdLy').style.color = ytdBadge.color; }
+  if (el('trendYtdLySub')) el('trendYtdLySub').textContent = `${fmtM(ytd.ly_same_period?.total)} Jan 1–${moName.split(' ')[0]} ${cur.days_elapsed - 1 > 0 ? cur.days_elapsed : ''}, ${cur.yr - 1}`;
+
+  const bm = ytd.best_month;
+  if (el('trendBestMonth'))    el('trendBestMonth').textContent    = bm ? fmtM(bm.total) : '—';
+  if (el('trendBestMonthSub')) el('trendBestMonthSub').textContent = bm ? bm.label : '—';
+}
+
+// ── Terminal drill-down ──────────────────────────────────────────────────────
+function openTrendDrillDown() {
+  const td      = TREND_DATA;
+  if (!td || !td.history) return;
+  const history = td.history || [];
+  const cur     = td.current || {};
+  const ytd     = td.ytd    || {};
+  const hist14  = history;
+  const labels  = [...hist14.map(m => m.label), cur.label || 'Current'];
+  const CIDX    = labels.length - 1;
+
+  // Build datasets per terminal
+  const datasets = [];
+  ['HOU','LOU','DFW','OKC'].forEach(t => {
+    const color = TERM_COLORS[t];
+    const solidData = hist14.map(m => m[t] || 0);
+    solidData.push(null);
+    const lastVal = hist14.length ? (hist14[hist14.length-1][t] || 0) : 0;
+    const projVal = cur.projected ? (cur.projected[t] || 0) : 0;
+    const bridge  = labels.map((_,i) => {
+      if (i === CIDX-1) return lastVal;
+      if (i === CIDX)   return projVal;
+      return null;
+    });
+    datasets.push({
+      label: t, data: solidData,
+      borderColor: color, backgroundColor: color,
+      borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 6,
+      pointBackgroundColor: color, tension: 0.35, spanGaps: false,
+    });
+    datasets.push({
+      label: t+'_proj', data: bridge,
+      borderColor: color, backgroundColor:'transparent',
+      borderWidth:2, borderDash:[6,4],
+      pointRadius: bridge.map((_,i)=>i===CIDX?6:0),
+      pointBackgroundColor:'#fff', pointBorderColor:color, pointBorderWidth:2.5,
+      tension:0.35, spanGaps:false,
+    });
+  });
+
+  const termVals = ['HOU','LOU','DFW','OKC'].flatMap(t =>
+    hist14.map(m => m[t]||0).concat(cur.projected ? [cur.projected[t]||0] : [])
+  ).filter(v => v > 0);
+  const yMinT = termVals.length ? Math.floor(Math.min(...termVals)*0.90/10000)*10000 : 0;
+
+  const ctx2 = document.getElementById('trendTerminalChart').getContext('2d');
+  if (window._trendTermChart_c) window._trendTermChart_c.destroy();
+  window._trendTermChart_c = new Chart(ctx2, {
+    type:'line', data:{ labels, datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{
+          title: items => items[0].index===CIDX ? `${cur.label}  (Day ${cur.days_elapsed} of ${cur.days_in_month})` : items[0].label,
+          label: item => {
+            if (item.raw===null||item.raw===undefined) return null;
+            const base = item.dataset.label.replace('_proj','');
+            const tag  = item.dataset.label.endsWith('_proj') ? ' (proj)' : '';
+            return `  ${TERM_LABELS[base]||base}: ${fmtM(item.raw)}${tag}`;
+          }
+        }}
+      },
+      scales:{
+        x:{grid:{color:'#f1f5f9'},ticks:{color:ctx=>ctx.index===CIDX?'#0f2240':'#64748b',font:ctx=>ctx.index===CIDX?{size:10,weight:'bold'}:{size:10}}},
+        y:{min:yMinT,grid:{color:'#f1f5f9'},ticks:{color:'#64748b',font:{size:10},callback:v=>fmtM(v)}}
+      }
+    },
+    plugins:[{id:'termBand2',beforeDraw(chart){
+      const {ctx,chartArea,scales}=chart;
+      const x=scales.x.getPixelForValue(CIDX);
+      const w=scales.x.getPixelForValue(1)-scales.x.getPixelForValue(0);
+      ctx.save();ctx.fillStyle='rgba(15,34,64,0.04)';
+      ctx.fillRect(x-w*0.5,chartArea.top,w,chartArea.bottom-chartArea.top);
+      ctx.fillStyle='#0f2240';ctx.font='bold 10px Segoe UI,Arial';ctx.textAlign='center';
+      ctx.fillText('▼ Current',x,chartArea.top+10);ctx.restore();
+    }}]
+  });
+
+  // MTD terminal cards
+  const moLbl = cur.label || '';
+  const el = id => document.getElementById(id);
+  if (el('trendDrillMtdLabel')) el('trendDrillMtdLabel').textContent =
+    `📅 Month to Date — ${moLbl} (Day ${cur.days_elapsed} of ${cur.days_in_month}  ·  ${Math.round(cur.days_elapsed/cur.days_in_month*100)}% through month)`;
+
+  const mtdCards = ['HOU','LOU','DFW','OKC'].map(t => {
+    const color = TERM_COLORS[t];
+    const label = TERM_LABELS[t];
+    const actual = cur.mtd?.[t] || 0;
+    const proj   = cur.projected?.[t] || 0;
+    const ly     = cur.ly_same_period?.[t] || 0;
+    const badge  = pctBadge(actual, ly);
+    const lyMoShort = moLbl.replace(/\d{4}/, yr => yr-1);
+    return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;">
+      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:${color};margin-bottom:6px;">${label}</div>
+      <div style="font-size:0.72rem;color:#475569;margin-bottom:2px;">Actual MTD: <strong style="color:#0f2240;">${fmtM(actual)}</strong></div>
+      <div style="font-size:0.72rem;color:#475569;margin-bottom:4px;">Projected full month: <strong style="color:#0f2240;">${fmtM(proj)}</strong></div>
+      <div style="font-size:0.68rem;color:#64748b;">vs LY same ${cur.days_elapsed} days: <span style="color:${badge.color};font-weight:600;">${badge.html}</span> &nbsp;(${fmtM(ly)} in ${lyMoShort})</div>
+    </div>`;
+  }).join('');
+  if (el('trendDrillMtdCards')) el('trendDrillMtdCards').innerHTML = mtdCards;
+
+  // YTD terminal cards
+  if (el('trendDrillYtdLabel')) el('trendDrillYtdLabel').textContent =
+    `📆 Year to Date — Jan 1 through ${moLbl.split(' ')[0]} ${cur.days_elapsed}, ${cur.yr}`;
+
+  const ytdCards = ['HOU','LOU','DFW','OKC'].map(t => {
+    const color  = TERM_COLORS[t];
+    const label  = TERM_LABELS[t];
+    const actual = ytd.actual?.[t] || 0;
+    const proj   = ytd.projected?.[t] || 0;
+    const ly     = ytd.ly_same_period?.[t] || 0;
+    const badge  = pctBadge(actual, ly);
+    return `<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px 14px;">
+      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:${color};margin-bottom:6px;">${label}</div>
+      <div style="font-size:0.72rem;color:#475569;margin-bottom:2px;">YTD Actual: <strong style="color:#0f2240;">${fmtM(actual)}</strong></div>
+      <div style="font-size:0.72rem;color:#475569;margin-bottom:4px;">YTD Projected (thru month-end): <strong style="color:#0f2240;">${fmtM(proj)}</strong></div>
+      <div style="font-size:0.68rem;color:#64748b;">vs LY same period: <span style="color:${badge.color};font-weight:600;">${badge.html}</span> &nbsp;(${fmtM(ly)} in ${cur.yr-1})</div>
+    </div>`;
+  }).join('');
+  if (el('trendDrillYtdCards')) el('trendDrillYtdCards').innerHTML = ytdCards;
+
+  document.getElementById('trendPanelCompany').style.display = 'none';
+  document.getElementById('trendPanelTerminal').style.display = 'block';
+}
+
+function closeTrendDrillDown() {
+  document.getElementById('trendPanelTerminal').style.display = 'none';
+  document.getElementById('trendPanelCompany').style.display = 'block';
+}
+
+// ════════════════════════════════════════
+// INIT — fetch live data if URL is configured, else use hardcoded fallback
+// ════════════════════════════════════════
+function initDashboard(liveData) {
+  if (liveData) {
+    ['today','week','month'].forEach(p => {
+      if (liveData[p]) DATA[p] = liveData[p];
+    });
+    if (liveData.trends) TREND_DATA = liveData.trends;
+    if (liveData.cancelledLoads) CANCEL_DATA = liveData.cancelledLoads; // period-keyed: {today,week,month}
+    // Update live driver/tractor availability KPIs and terminal table
+    if (liveData.driverAvailability) {
+      const da  = liveData.driverAvailability;
+      const all = da.all || {};
+      if (all.available != null) {
+        document.getElementById('kpiDriversWaiting').textContent = all.available.toLocaleString();
+        document.getElementById('kpiDriversSub').textContent =
+          'of ' + (all.driver_total || 0).toLocaleString() + ' total drivers';
+      }
+      renderDriverAvailTable(da);
+    }
+    if (liveData.tractorAvailability && liveData.tractorAvailability.available != null) {
+      document.getElementById('kpiTractorsAvailable').textContent = liveData.tractorAvailability.available.toLocaleString();
+    }
+  }
+
+  const ctOpts = {month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true,timeZone:'America/Chicago'};
+  const ts = liveData?.generatedAt
+    ? 'Data as of ' + new Date(liveData.generatedAt).toLocaleString('en-US', ctOpts) + ' CT'
+    : 'Updated: '   + new Date().toLocaleString('en-US', ctOpts) + ' CT';
+  document.getElementById('lastUpdated').textContent = ts;
+
+  render();
+  renderTrendChart();
+  renderCancelledLoads();
+}
+
+// Use embedded data injected by updater script (Azure hosting), else fetch live
+// Called by MSAL auth handler after successful sign-in
+function _startDashboard() {
+  if (window.__DASHBOARD_DATA__) {
+    initDashboard(window.__DASHBOARD_DATA__);
+  } else {
+    const _liveUrl = resolveDataUrl();
+    if (_liveUrl) {
+      fetch(_liveUrl, { credentials: 'include' })
+        .then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json();
+        })
+        .then(json => {
+          console.log('Live data loaded:', json.generatedAt);
+          initDashboard(json);
+        })
+        .catch(err => {
+          console.warn('Could not load live data — using embedded snapshot:', err.message);
+          initDashboard(null);
+        });
+    } else {
+      initDashboard(null);
+    }
+  }
+}
+
+// ── Microsoft authentication (MSAL.js) ──────────────────────────────────────
+(async function () {
+  const _msalCfg = {
+    auth: {
+      clientId:   '52b843e0-a127-4a79-80b3-b53d136e62da',
+      authority:  'https://login.microsoftonline.com/337a295b-e926-45b4-808c-303314c21e45',
+      redirectUri: window.location.href.split(/[?#]/)[0],
+    },
+    cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false },
+  };
+
+  const _msal = new msal.PublicClientApplication(_msalCfg);
+
+  try {
+    // Handle the redirect response when returning from Microsoft login
+    const resp = await _msal.handleRedirectPromise();
+    const account = resp?.account || _msal.getAllAccounts()[0];
+
+    if (!account) {
+      // No active session — send to Microsoft login (will redirect back here)
+      await _msal.loginRedirect({ scopes: ['openid', 'profile'] });
+      return;
+    }
+
+    // Authenticated — reveal dashboard
+    _msal.setActiveAccount(account);
+    document.getElementById('authOverlay').style.display = 'none';
+    _startDashboard();
+
+  } catch (err) {
+    console.error('Auth error:', err);
+    const el = document.getElementById('authError');
+    if (el) el.textContent = 'Sign-in failed: ' + (err.message || err);
+  }
+})();
+</script>
+</body>
+</html>
