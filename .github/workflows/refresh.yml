@@ -1,0 +1,37 @@
+name: Refresh Dashboard
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run dashboard refresh
+        env:
+          GRAPH_TENANT_ID: ${{ secrets.GRAPH_TENANT_ID }}
+          GRAPH_CLIENT_ID: ${{ secrets.GRAPH_CLIENT_ID }}
+          GRAPH_CLIENT_SECRET: ${{ secrets.GRAPH_CLIENT_SECRET }}
+          TMW_MCP_URL: ${{ secrets.TMW_MCP_URL }}
+          TMW_MCP_KEY: ${{ secrets.TMW_MCP_KEY }}
+          DASHBOARD_OUTPUT_DIR: ${{ github.workspace }}
+          DASHBOARD_TEMPLATE: ${{ github.workspace }}/dashboard-template.html
+        run: python dashboard_refresh.py
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add operations-dashboard.html
+          git diff --staged --quiet || git commit -m "Refresh dashboard $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push
